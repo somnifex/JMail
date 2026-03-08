@@ -1,0 +1,40 @@
+# Web Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# Database
+sqlalchemy==2.0.23
+alembic==1.12.1
+aiosqlite==0.19.0
+
+# Authentication
+passlib
+python-jose[cryptography]==3.3.0
+python-oauth2==1.0
+
+# Email
+imap-tools==1.5.0
+aiosmtplib==3.0.1
+email-validator==2.2.0
+
+# Validation
+pydantic[email]==2.5.0
+pydantic-settings==2.1.0
+
+# Async
+asyncio==3.4.3
+aiofiles==23.2.1
+aiocron==1.8
+
+# Templates & Static
+jinja2==3.1.2
+
+# Utilities
+python-dotenv==1.0.0
+orjson==3.9.10
+
+# Development (optional)
+pytest==7.4.3
+pytest-asyncio==0.21.1
+black==23.11.0
