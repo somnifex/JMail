@@ -1,4 +1,4 @@
-﻿import { useJmailStore } from '../store.js';
+import { useJmailStore } from '../store.js';
 import { InboxView } from '../views/inbox.js';
 import { AccountsView, AdminView, OverviewView, ProfileView, UsersView } from '../views/dashboard.js';
 
@@ -183,105 +183,139 @@ const WorkspaceShell = {
                 </div>
             </div>
 
-            <article class="sidebar-panel glass-subpanel sidebar-panel--identity">
-                <div>
-                    <p class="section-kicker">{{ t('Current User') }}</p>
-                    <h3>{{ userDisplayName }}</h3>
-                    <p class="muted-copy">{{ state.user?.email || t('Not signed in') }}</p>
+            <div class="sidebar-body">
+                <div class="nav-group nav-group--compact">
+                    <p class="nav-group__title">{{ t('Core') }}</p>
+                    <button v-for="item in PRIMARY_NAV" :key="item.key" type="button" class="nav-button nav-button--compact" :class="{ 'is-active': state.currentView === item.key }" @click="openView(item.key)">
+                        <span class="nav-button__marker"></span>
+                        <div class="nav-button__meta">
+                            <strong>{{ t(item.label) }}</strong>
+                        </div>
+                    </button>
                 </div>
-                <div class="sidebar-card__stats sidebar-card__stats--compact">
-                    <div>
-                        <span>{{ t('Unread') }}</span>
-                        <strong>{{ aggregateStats.unread || 0 }}</strong>
-                    </div>
-                    <div>
-                        <span>{{ t('Mailboxes') }}</span>
-                        <strong>{{ state.mailboxes.length }}</strong>
-                    </div>
-                    <div>
-                        <span>{{ t('Rules') }}</span>
-                        <strong>{{ activeRuleCount || 0 }}</strong>
-                    </div>
-                    <div>
-                        <span>{{ t('Alerts') }}</span>
-                        <strong>{{ aggregateStats.errors || 0 }}</strong>
-                    </div>
-                </div>
-            </article>
 
-            <div class="nav-group nav-group--compact">
-                <p class="nav-group__title">{{ t('Core') }}</p>
-                <button v-for="item in PRIMARY_NAV" :key="item.key" type="button" class="nav-button nav-button--compact" :class="{ 'is-active': state.currentView === item.key }" @click="openView(item.key)">
-                    <span class="nav-button__marker"></span>
-                    <div class="nav-button__meta">
-                        <strong>{{ t(item.label) }}</strong>
-                    </div>
-                </button>
+                <div class="nav-group nav-group--compact">
+                    <p class="nav-group__title">{{ t('Personal') }}</p>
+                    <button v-for="item in SECONDARY_NAV" :key="item.key" type="button" class="nav-button nav-button--compact" :class="{ 'is-active': state.currentView === item.key }" @click="openView(item.key)">
+                        <span class="nav-button__marker"></span>
+                        <div class="nav-button__meta">
+                            <strong>{{ t(item.label) }}</strong>
+                        </div>
+                    </button>
+                </div>
+
+                <div v-if="isAdmin" class="nav-group nav-group--compact">
+                    <p class="nav-group__title">{{ t('Administration') }}</p>
+                    <button v-for="item in ADMIN_NAV" :key="item.key" type="button" class="nav-button nav-button--compact" :class="{ 'is-active': state.currentView === item.key }" @click="openView(item.key)">
+                        <span class="nav-button__marker"></span>
+                        <div class="nav-button__meta">
+                            <strong>{{ t(item.label) }}</strong>
+                        </div>
+                    </button>
+                </div>
             </div>
 
-            <div class="nav-group nav-group--compact">
-                <p class="nav-group__title">{{ t('Personal') }}</p>
-                <button v-for="item in SECONDARY_NAV" :key="item.key" type="button" class="nav-button nav-button--compact" :class="{ 'is-active': state.currentView === item.key }" @click="openView(item.key)">
-                    <span class="nav-button__marker"></span>
-                    <div class="nav-button__meta">
-                        <strong>{{ t(item.label) }}</strong>
+            <div class="sidebar-footer">
+                <el-popover placement="top-start" :width="320" trigger="click" popper-class="sidebar-user-popover">
+                    <template #reference>
+                        <button type="button" class="sidebar-userdock">
+                            <span class="sidebar-userdock__avatar">{{ userInitial }}</span>
+                            <span class="sidebar-userdock__copy">
+                                <strong>{{ userDisplayName }}</strong>
+                                <small>{{ state.user?.email || t('Not signed in') }}</small>
+                            </span>
+                            <span class="sidebar-userdock__toggle"></span>
+                        </button>
+                    </template>
+                    <div class="sidebar-userpanel">
+                        <div class="sidebar-userpanel__head">
+                            <div>
+                                <p class="section-kicker">{{ t('Current User') }}</p>
+                                <h3>{{ userDisplayName }}</h3>
+                                <p class="muted-copy">{{ state.user?.email || t('Not signed in') }}</p>
+                            </div>
+                            <span class="status-pill" data-tone="info">{{ userRoleLabel(state.user?.role) }}</span>
+                        </div>
+                        <div class="sidebar-userpanel__stats">
+                            <div>
+                                <span>{{ t('Unread') }}</span>
+                                <strong>{{ aggregateStats.unread || 0 }}</strong>
+                            </div>
+                            <div>
+                                <span>{{ t('Mailboxes') }}</span>
+                                <strong>{{ state.mailboxes.length }}</strong>
+                            </div>
+                        </div>
+                        <article class="sidebar-userpanel__quota">
+                            <div class="sidebar-panel__head">
+                                <div>
+                                    <p class="section-kicker">{{ t('Capacity') }}</p>
+                                    <h3>{{ state.mailboxes.length }} / {{ state.user?.max_mailboxes || 0 }}</h3>
+                                </div>
+                                <span class="status-pill" data-tone="info">{{ t('Quota') }}</span>
+                            </div>
+                            <div class="quota-bar quota-bar--compact">
+                                <span :style="{ width: mailboxUsagePercent + '%' }"></span>
+                            </div>
+                            <p class="muted-copy">{{ t('Mailbox quota usage is currently {percent}%.', { percent: mailboxUsagePercent }) }}</p>
+                        </article>
+                        <div class="sidebar-userpanel__actions">
+                            <el-button @click="refreshCurrentView()" :loading="state.refreshing">{{ t('Refresh') }}</el-button>
+                            <el-button type="danger" plain @click="logout()">{{ t('Sign out') }}</el-button>
+                        </div>
                     </div>
-                </button>
-            </div>
-
-            <div v-if="isAdmin" class="nav-group nav-group--compact">
-                <p class="nav-group__title">{{ t('Administration') }}</p>
-                <button v-for="item in ADMIN_NAV" :key="item.key" type="button" class="nav-button nav-button--compact" :class="{ 'is-active': state.currentView === item.key }" @click="openView(item.key)">
-                    <span class="nav-button__marker"></span>
-                    <div class="nav-button__meta">
-                        <strong>{{ t(item.label) }}</strong>
-                    </div>
-                </button>
-            </div>
-
-            <article class="sidebar-panel glass-subpanel sidebar-panel--quota">
-                <div class="sidebar-panel__head">
-                    <div>
-                        <p class="section-kicker">{{ t('Capacity') }}</p>
-                        <h3>{{ state.mailboxes.length }} / {{ state.user?.max_mailboxes || 0 }}</h3>
-                    </div>
-                    <span class="status-pill" data-tone="info">{{ t('Quota') }}</span>
-                </div>
-                <div class="quota-bar quota-bar--compact">
-                    <span :style="{ width: mailboxUsagePercent + '%' }"></span>
-                </div>
-                <p class="muted-copy">{{ t('Mailbox quota usage is currently {percent}%.', { percent: mailboxUsagePercent }) }}</p>
-            </article>
-
-            <div class="sidebar-footer sidebar-footer--stacked">
-                <button type="button" class="ghost-button" @click="refreshCurrentView()">{{ t('Refresh data') }}</button>
-                <button type="button" class="ghost-button ghost-button--danger" @click="logout()">{{ t('Sign out') }}</button>
+                </el-popover>
             </div>
         </aside>
 
         <div class="workspace-main">
-            <header class="workspace-topbar workspace-topbar--flat">
+            <header class="workspace-topbar workspace-topbar--studio">
                 <div class="workspace-topbar__lead">
                     <button v-if="state.isMobile" type="button" class="menu-button" @click="state.mobileNavOpen = true">{{ t('Menu') }}</button>
-                    <div>
-                        <p class="section-kicker">{{ t(currentViewMeta.kicker) }}</p>
+                    <div class="workspace-topbar__copy">
+                        <span class="workspace-topbar__badge">{{ t(currentViewMeta.kicker) }}</span>
                         <h1>{{ state.currentView === 'inbox' ? currentScopeLabel : t(currentViewMeta.title) }}</h1>
                         <p>{{ state.currentView === 'inbox' ? currentScopeDescription : t(currentViewMeta.description) }}</p>
                     </div>
                 </div>
-                <div class="workspace-topbar__metrics workspace-topbar__metrics--flat">
-                    <article class="topbar-stat topbar-stat--flat" v-for="item in heroStats" :key="item.label">
-                        <span>{{ t(item.label) }}</span>
-                        <strong>{{ item.value }}</strong>
-                        <small>{{ t(item.hint) }}</small>
-                    </article>
-                </div>
-                <div class="workspace-topbar__actions">
-                    <el-button @click="refreshCurrentView()" :loading="state.refreshing">{{ t('Refresh') }}</el-button>
-                    <el-button type="primary" @click="openCompose()">{{ t('Compose') }}</el-button>
-                    <button type="button" class="avatar-button" @click="openView('profile')">
-                        <span>{{ userInitial }}</span>
-                    </button>
+                <div class="workspace-topbar__side">
+                    <div v-if="!state.isMobile" class="workspace-topbar__capsules">
+                        <span class="workspace-topbar__capsule">{{ t('Unread') }} {{ aggregateStats.unread || 0 }}</span>
+                        <span class="workspace-topbar__capsule">{{ t('Mailboxes') }} {{ state.mailboxes.length }}</span>
+                        <span class="workspace-topbar__capsule">{{ t('Rules') }} {{ activeRuleCount || 0 }}</span>
+                    </div>
+                    <div class="workspace-topbar__actions">
+                        <el-button @click="refreshCurrentView()" :loading="state.refreshing">{{ t('Refresh') }}</el-button>
+                        <el-button
+                            v-if="state.currentView === 'overview'"
+                            type="primary"
+                            @click="startMailboxOnboarding()"
+                        >
+                            {{ t('Connect mailbox') }}
+                        </el-button>
+                        <el-button
+                            v-else-if="state.currentView === 'accounts'"
+                            type="primary"
+                            @click="startMailboxOnboarding()"
+                        >
+                            {{ t('Add Mailbox') }}
+                        </el-button>
+                        <el-button
+                            v-else-if="isAdmin && state.currentView === 'users'"
+                            type="primary"
+                            @click="openCreateUserDrawer()"
+                        >
+                            {{ t('Create User') }}
+                        </el-button>
+                        <el-button
+                            v-else-if="isAdmin && state.currentView === 'admin'"
+                            type="primary"
+                            @click="openView('users')"
+                        >
+                            {{ t('Users & Access') }}
+                        </el-button>
+                        <el-button v-else-if="state.currentView === 'inbox'" type="primary" @click="openCompose()">{{ t('Compose') }}</el-button>
+                    </div>
                 </div>
             </header>
 

@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     EMAIL_STORAGE_PATH: str = './data/emails'
 
     DEFAULT_EMAIL_FETCH_INTERVAL: int = 300
-    MAX_EMAILS_PER_USER: int = 1000
+    DEFAULT_STORAGE_QUOTA_BYTES: int = 10 * 1024 * 1024 * 1024  # 默认10GB存储配额
 
     ADMIN_EMAIL: str = 'admin@example.com'
     ADMIN_PASSWORD: str = 'admin123'

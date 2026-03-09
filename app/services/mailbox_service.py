@@ -1,15 +1,17 @@
-from datetime import datetime, timedelta
+﻿from datetime import datetime, timedelta
 from typing import List, Optional
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
 from app.models import Email, Mailbox, MailboxStatus
 from app.models.mailbox import DEFAULT_FETCH_FOLDERS
 from app.models.schemas import MailboxCreate, MailboxUpdate
 from app.services.mail_provider_service import MailProviderService
+from app.services.system_config_service import SystemConfigService
 from app.services.user_service import UserService
 
 
@@ -20,7 +22,9 @@ class MailboxService:
         self.provider_service = MailProviderService(get_settings())
 
     async def get_by_id(self, mailbox_id: int) -> Optional[Mailbox]:
-        result = await self.db.execute(select(Mailbox).where(Mailbox.id == mailbox_id))
+        result = await self.db.execute(
+            select(Mailbox).options(selectinload(Mailbox.user)).where(Mailbox.id == mailbox_id)
+        )
         return result.scalar_one_or_none()
 
     async def get_by_email(self, email: str) -> Optional[Mailbox]:
@@ -84,6 +88,9 @@ class MailboxService:
         if current_count >= user.max_mailboxes:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f'Maximum mailbox limit ({user.max_mailboxes}) reached')
 
+        runtime_settings = await SystemConfigService(self.db).get_runtime_settings()
+        resolved_fetch_interval = data.fetch_interval if data.fetch_interval is not None else runtime_settings.default_fetch_interval
+
         mailbox = Mailbox(
             user_id=user_id,
             email=normalized_email,
@@ -104,7 +111,7 @@ class MailboxService:
             oauth_access_token=data.oauth_token,
             oauth_refresh_token=data.oauth_refresh_token,
             oauth_token_expires_at=data.oauth_token_expires_at,
-            fetch_interval=data.fetch_interval,
+            fetch_interval=resolved_fetch_interval,
             fetch_folders=self.normalize_fetch_folders(data.fetch_folders),
             is_active=True,
             last_error=None,
@@ -180,7 +187,7 @@ class MailboxService:
         name: Optional[str],
         token_data: dict,
         mailbox_id: Optional[int] = None,
-        fetch_interval: int = 300,
+        fetch_interval: Optional[int] = None,
     ) -> Mailbox:
         email = email.lower().strip()
         user = await self.user_service.get_by_id(user_id)
@@ -188,7 +195,8 @@ class MailboxService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='User not found')
 
         mailbox = await self.get_by_id_and_user(mailbox_id, user_id) if mailbox_id else await self.get_by_email_and_user(user_id, email)
-        if mailbox is None:
+        is_new = mailbox is None
+        if is_new:
             current_count = await self.count_by_user(user_id)
             if current_count >= user.max_mailboxes:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f'Maximum mailbox limit ({user.max_mailboxes}) reached')
@@ -217,7 +225,13 @@ class MailboxService:
         mailbox.oauth_scope = token_data.get('scope')
         expires_in = int(token_data.get('expires_in') or 3600)
         mailbox.oauth_token_expires_at = token_data.get('oauth_token_expires_at') or datetime.utcnow() + timedelta(seconds=expires_in)
-        mailbox.fetch_interval = fetch_interval or mailbox.fetch_interval or 300
+
+        resolved_fetch_interval = fetch_interval
+        if resolved_fetch_interval is None and is_new:
+            runtime_settings = await SystemConfigService(self.db).get_runtime_settings()
+            resolved_fetch_interval = runtime_settings.default_fetch_interval
+
+        mailbox.fetch_interval = resolved_fetch_interval or mailbox.fetch_interval or 300
         mailbox.fetch_folders = self.normalize_fetch_folders(mailbox.fetch_folders)
         mailbox.is_active = True
         mailbox.last_error = None

@@ -1,4 +1,4 @@
-import json
+﻿import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
@@ -12,6 +12,7 @@ from app.services.email_fetcher import EmailFetcher
 from app.services.mail_oauth_service import MailOAuthService
 from app.services.mail_provider_service import MailProviderService
 from app.services.mailbox_service import MailboxService
+from app.services.system_config_service import SystemConfigService
 
 router = APIRouter()
 
@@ -61,22 +62,26 @@ async def _handle_oauth_callback(
     db: AsyncSession,
 ):
     if error:
-        return _build_oauth_popup_html({
-            'source': 'jmail-mailbox-oauth',
-            'provider': provider,
-            'success': False,
-            'error': error,
-            'error_description': error_description,
-        })
+        return _build_oauth_popup_html(
+            {
+                'source': 'jmail-mailbox-oauth',
+                'provider': provider,
+                'success': False,
+                'error': error,
+                'error_description': error_description,
+            }
+        )
 
     if not code:
-        return _build_oauth_popup_html({
-            'source': 'jmail-mailbox-oauth',
-            'provider': provider,
-            'success': False,
-            'error': 'missing_code',
-            'error_description': '授权回调未返回授权码。',
-        })
+        return _build_oauth_popup_html(
+            {
+                'source': 'jmail-mailbox-oauth',
+                'provider': provider,
+                'success': False,
+                'error': 'missing_code',
+                'error_description': '授权回调未返回授权码。',
+            }
+        )
 
     oauth_service = MailOAuthService(db)
     state_payload = oauth_service.decode_state(state or '', provider)
@@ -85,14 +90,15 @@ async def _handle_oauth_callback(
 
     if provider == 'google':
         email = (profile.get('email') or state_payload.get('email_hint') or '').lower().strip()
-        display_name = profile.get('name') or email.split('@')[0]
+        display_name = profile.get('name') or (email.split('@')[0] if email else '')
     else:
         email = (profile.get('mail') or profile.get('userPrincipalName') or state_payload.get('email_hint') or '').lower().strip()
-        display_name = profile.get('displayName') or email.split('@')[0]
+        display_name = profile.get('displayName') or (email.split('@')[0] if email else '')
 
     if not email:
         raise HTTPException(status_code=400, detail='无法从 OAuth 资料中识别邮箱地址')
 
+    runtime_settings = await SystemConfigService(db).get_runtime_settings()
     mailbox = await MailboxService(db).upsert_oauth_mailbox(
         user_id=int(state_payload['sub']),
         provider=provider,
@@ -100,16 +106,19 @@ async def _handle_oauth_callback(
         name=display_name,
         token_data=token_data,
         mailbox_id=state_payload.get('mailbox_id'),
+        fetch_interval=runtime_settings.default_fetch_interval,
     )
 
-    return _build_oauth_popup_html({
-        'source': 'jmail-mailbox-oauth',
-        'provider': provider,
-        'success': True,
-        'mailbox_id': mailbox.id,
-        'email': mailbox.email,
-        'name': mailbox.name,
-    })
+    return _build_oauth_popup_html(
+        {
+            'source': 'jmail-mailbox-oauth',
+            'provider': provider,
+            'success': True,
+            'mailbox_id': mailbox.id,
+            'email': mailbox.email,
+            'name': mailbox.name,
+        }
+    )
 
 
 @router.get('/providers/catalog')
@@ -119,7 +128,10 @@ async def list_provider_catalog(current_user: UserResponse = Depends(get_current
 
 
 @router.get('/providers/detect')
-async def detect_provider(email: str = Query(..., min_length=3, max_length=320), current_user: UserResponse = Depends(get_current_active_user)):
+async def detect_provider(
+    email: str = Query(..., min_length=3, max_length=320),
+    current_user: UserResponse = Depends(get_current_active_user),
+):
     del current_user
     return MailProviderService(get_settings()).detect(email)
 
@@ -182,13 +194,21 @@ async def list_mailboxes(
 
 
 @router.post('', response_model=MailboxResponse)
-async def create_mailbox(data: MailboxCreate, current_user: UserResponse = Depends(get_current_active_user), db: AsyncSession = Depends(get_db)):
+async def create_mailbox(
+    data: MailboxCreate,
+    current_user: UserResponse = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
     mailbox = await MailboxService(db).create(user_id=current_user.id, data=data)
     return MailboxResponse.model_validate(mailbox)
 
 
 @router.get('/{mailbox_id}', response_model=MailboxResponse)
-async def get_mailbox(mailbox_id: int, current_user: UserResponse = Depends(get_current_active_user), db: AsyncSession = Depends(get_db)):
+async def get_mailbox(
+    mailbox_id: int,
+    current_user: UserResponse = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
     mailbox = await MailboxService(db).get_by_id_and_user(mailbox_id=mailbox_id, user_id=current_user.id)
     if not mailbox:
         raise HTTPException(status_code=404, detail='未找到邮箱账户')
@@ -196,7 +216,12 @@ async def get_mailbox(mailbox_id: int, current_user: UserResponse = Depends(get_
 
 
 @router.put('/{mailbox_id}', response_model=MailboxResponse)
-async def update_mailbox(mailbox_id: int, data: MailboxUpdate, current_user: UserResponse = Depends(get_current_active_user), db: AsyncSession = Depends(get_db)):
+async def update_mailbox(
+    mailbox_id: int,
+    data: MailboxUpdate,
+    current_user: UserResponse = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
     mailbox = await MailboxService(db).update(mailbox_id=mailbox_id, user_id=current_user.id, data=data)
     if not mailbox:
         raise HTTPException(status_code=404, detail='未找到邮箱账户')
@@ -204,7 +229,11 @@ async def update_mailbox(mailbox_id: int, data: MailboxUpdate, current_user: Use
 
 
 @router.delete('/{mailbox_id}')
-async def delete_mailbox(mailbox_id: int, current_user: UserResponse = Depends(get_current_active_user), db: AsyncSession = Depends(get_db)):
+async def delete_mailbox(
+    mailbox_id: int,
+    current_user: UserResponse = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
     success = await MailboxService(db).delete(mailbox_id=mailbox_id, user_id=current_user.id)
     if not success:
         raise HTTPException(status_code=404, detail='未找到邮箱账户')
@@ -212,7 +241,11 @@ async def delete_mailbox(mailbox_id: int, current_user: UserResponse = Depends(g
 
 
 @router.get('/{mailbox_id}/stats')
-async def get_mailbox_stats(mailbox_id: int, current_user: UserResponse = Depends(get_current_active_user), db: AsyncSession = Depends(get_db)):
+async def get_mailbox_stats(
+    mailbox_id: int,
+    current_user: UserResponse = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
     mailbox_service = MailboxService(db)
     mailbox = await mailbox_service.get_by_id_and_user(mailbox_id=mailbox_id, user_id=current_user.id)
     if not mailbox:
@@ -221,7 +254,11 @@ async def get_mailbox_stats(mailbox_id: int, current_user: UserResponse = Depend
 
 
 @router.post('/{mailbox_id}/fetch')
-async def trigger_fetch(mailbox_id: int, current_user: UserResponse = Depends(get_current_active_user), db: AsyncSession = Depends(get_db)):
+async def trigger_fetch(
+    mailbox_id: int,
+    current_user: UserResponse = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
     mailbox_service = MailboxService(db)
     mailbox = await mailbox_service.get_by_id_and_user(mailbox_id=mailbox_id, user_id=current_user.id)
     if not mailbox:

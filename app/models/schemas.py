@@ -1,138 +1,113 @@
-"""
-Pydantic 模型定义 - 用于请求/响应验证
-"""
-from datetime import datetime
+﻿from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
-# ==================== 用户相关模型 ====================
-
 class UserRole(str, Enum):
-    """用户角色"""
-    ADMIN = "admin"
-    USER = "user"
+    ADMIN = 'admin'
+    USER = 'user'
 
 
 class UserStatus(str, Enum):
-    """用户状态"""
-    ACTIVE = "active"
-    INACTIVE = "inactive"
-    SUSPENDED = "suspended"
+    ACTIVE = 'active'
+    INACTIVE = 'inactive'
+    SUSPENDED = 'suspended'
 
 
 class UserBase(BaseModel):
-    """用户基础模型"""
     email: EmailStr
     username: str = Field(..., min_length=3, max_length=50)
     full_name: Optional[str] = Field(None, max_length=100)
 
 
 class UserCreate(UserBase):
-    """用户创建模型"""
     password: str = Field(..., min_length=6, max_length=100)
 
 
 class UserUpdate(BaseModel):
-    """用户更新模型"""
     full_name: Optional[str] = Field(None, max_length=100)
     max_mailboxes: Optional[int] = Field(None, ge=1)
+    storage_quota_bytes: Optional[int] = Field(None, ge=1 * 1024 * 1024 * 1024)
     status: Optional[UserStatus] = None
 
 
 class UserResponse(UserBase):
-    """用户响应模型"""
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     role: UserRole
     status: UserStatus
     max_mailboxes: int
+    storage_quota_bytes: int
+    used_storage_bytes: int
+    storage_usage_percent: float
     created_at: datetime
     updated_at: datetime
     last_login: Optional[datetime] = None
 
 
 class UserInDB(UserResponse):
-    """数据库中的用户模型（包含敏感信息）"""
     hashed_password: Optional[str] = None
     recovery_code: Optional[str] = None
     recovery_code_expires: Optional[datetime] = None
 
 
-# ==================== 认证相关模型 ====================
-
 class Token(BaseModel):
-    """令牌模型"""
     access_token: str
-    token_type: str = "bearer"
+    token_type: str = 'bearer'
     expires_in: int
     user: UserResponse
 
 
 class TokenPayload(BaseModel):
-    """令牌载荷模型"""
     sub: Optional[int] = None
     exp: Optional[datetime] = None
 
 
 class LoginRequest(BaseModel):
-    """登录请求模型"""
     username: str
     password: str
     remember_me: bool = False
 
 
 class OAuthLoginRequest(BaseModel):
-    """OAuth 登录请求模型"""
     provider: str
     code: str
     redirect_uri: str
 
 
 class PasswordResetRequest(BaseModel):
-    """密码重置请求模型"""
     email: EmailStr
 
 
 class PasswordResetConfirm(BaseModel):
-    """密码重置确认模型"""
     email: EmailStr
     recovery_code: str = Field(..., min_length=8, max_length=8)
     new_password: str = Field(..., min_length=6, max_length=100)
 
 
 class ChangePasswordRequest(BaseModel):
-    """修改密码请求模型"""
     current_password: str
     new_password: str = Field(..., min_length=6, max_length=100)
 
 
-# ==================== 找回码相关模型 ====================
-
 class RecoveryCodeGenerate(BaseModel):
-    """生成找回码请求"""
     user_id: int
 
 
 class RecoveryCodeResponse(BaseModel):
-    """找回码响应"""
     recovery_code: str
     expires_at: datetime
 
 
 class RecoveryCodeVerify(BaseModel):
-    """验证找回码请求"""
     email: EmailStr
     recovery_code: str
 
 
-# ==================== 邮箱相关模型 ====================
-
 class OAuthConfig(BaseModel):
-    """OAuth 配置"""
     enabled: bool = False
     provider: Optional[str] = None
     token: Optional[str] = None
@@ -141,13 +116,11 @@ class OAuthConfig(BaseModel):
 
 
 class MailboxBase(BaseModel):
-    """邮箱基础模型"""
     email: EmailStr
     name: Optional[str] = Field(None, max_length=100)
 
 
 class MailboxCreate(MailboxBase):
-    """创建邮箱模型"""
     imap_server: str = Field(..., max_length=255)
     imap_port: int = Field(default=993, ge=1, le=65535)
     imap_use_ssl: bool = True
@@ -167,11 +140,11 @@ class MailboxCreate(MailboxBase):
     oauth_refresh_token: Optional[str] = None
     oauth_token_expires_at: Optional[datetime] = None
 
-    fetch_interval: int = Field(default=300, ge=60, le=3600)
+    fetch_interval: Optional[int] = Field(default=None, ge=60, le=3600)
     fetch_folders: Optional[str] = Field(default='INBOX\nTrash', max_length=2000)
 
+
 class MailboxUpdate(BaseModel):
-    """更新邮箱模型"""
     email: Optional[EmailStr] = None
     name: Optional[str] = Field(None, max_length=100)
     imap_server: Optional[str] = Field(None, max_length=255)
@@ -194,8 +167,8 @@ class MailboxUpdate(BaseModel):
     oauth_refresh_token: Optional[str] = None
     oauth_token_expires_at: Optional[datetime] = None
 
+
 class MailboxResponse(MailboxBase):
-    """邮箱响应模型"""
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -220,23 +193,19 @@ class MailboxResponse(MailboxBase):
     created_at: datetime
     updated_at: datetime
 
+
 class MailboxInDB(MailboxResponse):
-    """数据库中的邮箱模型（包含敏感信息）"""
     imap_password: Optional[str] = None
     smtp_password: Optional[str] = None
     oauth_refresh_token: Optional[str] = None
 
 
-# ==================== 邮件相关模型 ====================
-
 class EmailAddress(BaseModel):
-    """邮件地址模型"""
     address: EmailStr
     name: Optional[str] = None
 
 
 class AttachmentInfo(BaseModel):
-    """附件信息"""
     filename: str
     content_type: str
     size: int
@@ -244,12 +213,10 @@ class AttachmentInfo(BaseModel):
 
 
 class EmailBase(BaseModel):
-    """邮件基础模型"""
     subject: Optional[str] = None
 
 
 class EmailCreate(EmailBase):
-    """创建邮件模型"""
     mailbox_id: int
     uid: str
     message_id: Optional[str] = None
@@ -273,8 +240,8 @@ class EmailCreate(EmailBase):
     is_deleted: bool = False
     is_archived: bool = False
 
+
 class EmailUpdate(BaseModel):
-    """更新邮件模型"""
     status: Optional[str] = None
     is_flagged: Optional[bool] = None
     is_deleted: Optional[bool] = None
@@ -282,7 +249,6 @@ class EmailUpdate(BaseModel):
 
 
 class EmailResponse(EmailBase):
-    """邮件响应模型"""
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -316,7 +282,6 @@ class EmailResponse(EmailBase):
 
 
 class EmailListItem(BaseModel):
-    """邮件列表项（简化版，用于列表展示）"""
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -337,22 +302,17 @@ class EmailListItem(BaseModel):
 
 
 class EmailListResponse(BaseModel):
-    """邮件列表响应模型"""
     total: int
     items: List[EmailListItem]
 
 
 class ConversationResponse(BaseModel):
-    """会话时间线响应"""
     thread_key: str
     subject: Optional[str] = None
     items: List[EmailListItem]
 
 
-# ==================== 规则相关模型 ====================
-
 class MailRuleBase(BaseModel):
-    """规则基础模型"""
     name: str = Field(..., min_length=2, max_length=120)
     mailbox_id: Optional[int] = None
     match_field: str = Field(default='subject', min_length=2, max_length=40)
@@ -363,11 +323,10 @@ class MailRuleBase(BaseModel):
 
 
 class MailRuleCreate(MailRuleBase):
-    """创建规则模型"""
+    pass
 
 
 class MailRuleUpdate(BaseModel):
-    """更新规则模型"""
     name: Optional[str] = Field(None, min_length=2, max_length=120)
     mailbox_id: Optional[int] = None
     match_field: Optional[str] = Field(None, min_length=2, max_length=40)
@@ -378,7 +337,6 @@ class MailRuleUpdate(BaseModel):
 
 
 class MailRuleResponse(MailRuleBase):
-    """规则响应模型"""
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -387,10 +345,7 @@ class MailRuleResponse(MailRuleBase):
     updated_at: datetime
 
 
-# ==================== 邮件发送相关模型 ====================
-
 class SendEmailRequest(BaseModel):
-    """发送邮件请求"""
     mailbox_id: int
     to: List[EmailAddress]
     cc: Optional[List[EmailAddress]] = None
@@ -402,34 +357,26 @@ class SendEmailRequest(BaseModel):
 
 
 class SendEmailResponse(BaseModel):
-    """发送邮件响应"""
     success: bool
     message_id: Optional[str] = None
     error: Optional[str] = None
 
 
-# ==================== 系统设置模型 ====================
-
 class SystemSettings(BaseModel):
-    """系统设置"""
     allow_registration: bool = True
     default_max_mailboxes_per_user: int = 5
     default_fetch_interval: int = 300
-    max_emails_per_user: int = 1000
+    default_storage_quota_bytes: int = 10 * 1024 * 1024 * 1024
 
 
 class SystemSettingsUpdate(BaseModel):
-    """系统设置更新"""
     allow_registration: Optional[bool] = None
     default_max_mailboxes_per_user: Optional[int] = Field(None, ge=1, le=50)
     default_fetch_interval: Optional[int] = Field(None, ge=60, le=3600)
-    max_emails_per_user: Optional[int] = Field(None, ge=100, le=10000)
+    default_storage_quota_bytes: Optional[int] = Field(None, ge=1 * 1024 * 1024 * 1024, le=1000 * 1024 * 1024 * 1024)
 
-
-# ==================== 统计信息模型 ====================
 
 class DashboardStats(BaseModel):
-    """仪表盘统计"""
     total_users: int
     total_mailboxes: int
     total_emails: int
@@ -439,7 +386,6 @@ class DashboardStats(BaseModel):
 
 
 class UserStats(BaseModel):
-    """用户统计"""
     total_mailboxes: int
     total_emails: int
     unread_emails: int

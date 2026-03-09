@@ -11,28 +11,28 @@ export const VIEW_META = {
     },
     overview: {
         kicker: 'Overview',
-        title: 'Operations Overview',
-        description: 'Review workload, sync health, quotas and alerts from one dashboard.',
+        title: 'Operations Summary',
+        description: 'Review workload, sync health and capacity from one landing page.',
     },
     accounts: {
         kicker: 'Accounts',
-        title: 'Mailbox Accounts',
-        description: 'Manage mailbox onboarding, sync state and connection settings in one place.',
+        title: 'Mailbox Operations',
+        description: 'Manage onboarding, sync and connection status from one workbench.',
     },
     admin: {
-        kicker: 'Admin',
-        title: 'System Policy',
-        description: 'Control registration policy, default quotas and sync rules.',
+        kicker: 'Administration',
+        title: 'System Administration',
+        description: 'Control registration policy, default quotas and sync parameters from one page.',
     },
     users: {
         kicker: 'Users',
         title: 'Users & Access',
-        description: 'Manage users, access and recovery workflows from one screen.',
+        description: 'Day-to-day access control stays direct: create users, reset credentials and review account status quickly.',
     },
     profile: {
         kicker: 'Profile',
         title: 'Account Settings',
-        description: 'Maintain personal profile and account security settings.',
+        description: 'Keep profile details and account security in one clear settings page.',
     },
 };
 

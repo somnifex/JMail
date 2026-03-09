@@ -78,7 +78,7 @@ async def admin_list_users(
 @router.post("/users/{user_id}/password")
 async def admin_reset_user_password(
     user_id: int,
-    new_password: str,
+    new_password: str = Query(..., min_length=6, max_length=100),
     generate_recovery: bool = True,
     _: UserResponse = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
@@ -125,3 +125,4 @@ async def admin_delete_user(
     if not success:
         raise HTTPException(status_code=404, detail="User not found")
     return {"message": "User deleted successfully"}
+

@@ -1,6 +1,4 @@
-"""
-邮件服务层 - 处理邮件存储、检索与会话聚合
-"""
+﻿
 import os
 import re
 import uuid
@@ -17,11 +15,11 @@ from app.models import Email, EmailStatus, Mailbox
 from app.models.schemas import EmailCreate, EmailUpdate
 
 settings = get_settings()
-REPLY_PREFIX_RE = re.compile(r'^(?:(?:re|fw|fwd|答复|回复|转发)\s*[:：]\s*)+', re.IGNORECASE)
+REPLY_PREFIX_RE = re.compile(r'^(?:(?:re|fw|fwd|reply|forward)\\s*[:：]\\s*)+', re.IGNORECASE)
 
 
 class EmailService:
-    """邮件服务类"""
+    # Email service
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -467,3 +465,7 @@ class EmailService:
             'unread': int(unread_result.scalar_one() or 0),
             'mailbox_stats': mailbox_stats,
         }
+
+
+
+

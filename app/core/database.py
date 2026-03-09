@@ -1,4 +1,4 @@
-import os
+﻿import os
 
 from sqlalchemy import inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -62,6 +62,7 @@ async def init_db():
                 is_active=True,
                 is_verified=True,
                 max_mailboxes=100,
+                storage_quota_bytes=settings.DEFAULT_STORAGE_QUOTA_BYTES,
             )
             session.add(admin)
             await session.commit()
@@ -72,7 +73,7 @@ async def init_db():
             {'key': 'allow_registration', 'value': str(settings.ALLOW_REGISTRATION).lower(), 'description': 'Allow new user registration', 'is_editable': True},
             {'key': 'default_max_mailboxes', 'value': str(settings.DEFAULT_MAX_MAILBOXES_PER_USER), 'description': 'Default mailbox quota per user', 'is_editable': True},
             {'key': 'default_fetch_interval', 'value': str(settings.DEFAULT_EMAIL_FETCH_INTERVAL), 'description': 'Default email fetch interval in seconds', 'is_editable': True},
-            {'key': 'max_emails_per_user', 'value': str(settings.MAX_EMAILS_PER_USER), 'description': 'Maximum email storage per user', 'is_editable': True},
+            {'key': 'default_storage_quota_bytes', 'value': str(settings.DEFAULT_STORAGE_QUOTA_BYTES), 'description': 'Default storage quota per user in bytes', 'is_editable': True},
         ]
 
         for config in default_configs:
@@ -130,3 +131,9 @@ def _ensure_email_columns(sync_conn) -> None:
             'is_archived': 'BOOLEAN DEFAULT 0',
         },
     )
+
+
+
+
+
+

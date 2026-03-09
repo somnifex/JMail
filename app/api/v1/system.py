@@ -45,6 +45,9 @@ async def get_system_stats(current_user: UserResponse = Depends(get_current_acti
             'username': current_user.username,
             'email': current_user.email,
             'max_mailboxes': current_user.max_mailboxes,
+            'storage_quota_bytes': current_user.storage_quota_bytes,
+            'used_storage_bytes': current_user.used_storage_bytes,
+            'storage_usage_percent': current_user.storage_usage_percent,
         },
         'stats': {
             'mailbox_count': mailbox_count,

@@ -6,10 +6,13 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.security import generate_recovery_code, get_password_hash
 from app.models import User
 from app.models.enums import UserStatus
-from app.models.schemas import UserCreate, UserInDB, UserUpdate
+from app.models.schemas import UserCreate, UserUpdate
+
+settings = get_settings()
 
 
 class UserService:
@@ -36,13 +39,21 @@ class UserService:
         )
         return result.scalar_one_or_none()
 
-    async def create(self, user_data: UserCreate, max_mailboxes: int = 5) -> User:
+    async def create(
+        self,
+        user_data: UserCreate,
+        max_mailboxes: int = 5,
+        storage_quota_bytes: Optional[int] = None,
+    ) -> User:
+        resolved_quota = storage_quota_bytes or settings.DEFAULT_STORAGE_QUOTA_BYTES
+
         user = User(
             email=user_data.email.lower().strip(),
             username=user_data.username.strip(),
             hashed_password=get_password_hash(user_data.password),
             full_name=(user_data.full_name or '').strip() or None,
             max_mailboxes=max_mailboxes,
+            storage_quota_bytes=resolved_quota,
             is_active=True,
             is_admin=False,
             is_verified=False,
@@ -60,13 +71,17 @@ class UserService:
         provider: str,
         oauth_id: str,
         max_mailboxes: int = 5,
+        storage_quota_bytes: Optional[int] = None,
     ) -> User:
+        resolved_quota = storage_quota_bytes or settings.DEFAULT_STORAGE_QUOTA_BYTES
+
         user = User(
             email=email.lower().strip(),
             username=username.strip(),
             hashed_password='',
             full_name=(full_name or '').strip() or None,
             max_mailboxes=max_mailboxes,
+            storage_quota_bytes=resolved_quota,
             is_active=True,
             is_admin=False,
             is_verified=True,
@@ -188,3 +203,4 @@ class UserService:
         if normalized not in {member.value for member in UserStatus}:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid user status')
         return normalized
+

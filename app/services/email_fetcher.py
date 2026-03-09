@@ -41,6 +41,12 @@ class EmailFetcher:
 
         client = None
         try:
+            # 检查用户存储配额是否已满
+            if mailbox.user.is_storage_full:
+                error_msg = 'Storage quota exceeded, cannot fetch new emails'
+                await mailbox_service.update_status(mailbox.id, MailboxStatus.ERROR, error_msg)
+                return {'success': False, 'error': error_msg}
+
             client = await self._open_mailbox(mailbox)
             available_folders = self._list_available_folders(client)
             target_folders = self._resolve_target_folders(mailbox, available_folders)

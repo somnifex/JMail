@@ -1,4 +1,4 @@
-﻿import { useJmailStore } from '../store.js';
+import { useJmailStore } from '../store.js';
 import {
     EMAIL_FILTERS,
     EMAIL_SCOPE_ALL,
@@ -21,10 +21,10 @@ const RECENT_SEARCHES_KEY = 'jmail_inbox_recent_searches';
 const RULE_TEMPLATES = [
     {
         key: 'archive-sender',
-        title: 'Archive by sender',
-        copy: 'Move repetitive sender-based notifications out of the active inbox.',
+        title: '\u6309\u53d1\u4ef6\u4eba\u81ea\u52a8\u5f52\u6863',
+        copy: '\u81ea\u52a8\u5c06\u6307\u5b9a\u53d1\u4ef6\u4eba\u7684\u90ae\u4ef6\u79fb\u52a8\u5230\u5f52\u6863\uff0c\u51cf\u5c11\u6536\u4ef6\u7bb1\u5e72\u6270',
         build: () => ({
-            name: 'Archive sender notifications',
+            name: '\u6309\u53d1\u4ef6\u4eba\u81ea\u52a8\u5f52\u6863',
             match_field: 'sender',
             match_operator: 'contains',
             match_value: '',
@@ -34,10 +34,10 @@ const RULE_TEMPLATES = [
     },
     {
         key: 'flag-subject',
-        title: 'Flag by subject',
-        copy: 'Escalate conversations when the subject contains a key phrase.',
+        title: '\u6309\u4e3b\u9898\u6807\u8bb0\u91cd\u8981\u90ae\u4ef6',
+        copy: '\u5f53\u90ae\u4ef6\u4e3b\u9898\u5305\u542b\u6307\u5b9a\u5173\u952e\u8bcd\u65f6\u81ea\u52a8\u6807\u8bb0\u4e3a\u91cd\u8981\uff0c\u786e\u4fdd\u91cd\u8981\u90ae\u4ef6\u4e0d\u88ab\u9057\u6f0f',
         build: () => ({
-            name: 'Flag messages by subject',
+            name: '\u6309\u4e3b\u9898\u6807\u8bb0\u91cd\u8981\u90ae\u4ef6',
             match_field: 'subject',
             match_operator: 'contains',
             match_value: '',
@@ -47,10 +47,10 @@ const RULE_TEMPLATES = [
     },
     {
         key: 'attachments-read',
-        title: 'Mark attachment mail as read',
-        copy: 'Reduce review time for repetitive attachment notifications.',
+        title: '\u9644\u4ef6\u901a\u77e5\u81ea\u52a8\u6807\u4e3a\u5df2\u8bfb',
+        copy: '\u81ea\u52a8\u5c06\u7cfb\u7edf\u53d1\u9001\u7684\u9644\u4ef6\u901a\u77e5\u7c7b\u90ae\u4ef6\u6807\u8bb0\u4e3a\u5df2\u8bfb\uff0c\u63d0\u5347\u90ae\u4ef6\u5904\u7406\u6548\u7387',
         build: () => ({
-            name: 'Mark attachment notices as read',
+            name: '\u9644\u4ef6\u901a\u77e5\u81ea\u52a8\u6807\u4e3a\u5df2\u8bfb',
             match_field: 'attachments',
             match_operator: 'contains',
             match_value: '',
@@ -518,38 +518,38 @@ function useInboxWorkspace() {
 }
 
 const railTemplate = `
-<div class="rail-stack">
-    <article class="glass-panel rail-panel rail-panel--hero">
+<div class="rail-stack rail-stack--studio">
+    <article class="glass-panel rail-panel rail-panel--hero rail-panel--control">
         <div class="section-head section-head--compact">
             <div>
-                <p class="section-kicker">Current Scope</p>
+                <p class="section-kicker">{{ t('Scope') }}</p>
                 <h3>{{ currentScopeLabel }}</h3>
             </div>
             <span class="status-pill" :data-tone="currentScopeMailbox ? mailboxStatusTone(currentScopeMailbox.status) : 'success'">
-                {{ currentScopeMailbox ? mailboxStatusLabel(currentScopeMailbox.status) : 'All Mailboxes' }}
+                {{ currentScopeMailbox ? mailboxStatusLabel(currentScopeMailbox.status) : t('All Mailboxes') }}
             </span>
         </div>
         <p class="rail-copy">{{ currentScopeDescription }}</p>
-        <div class="scope-metrics">
-            <div v-for="item in heroStats.slice(0, 3)" :key="item.label">
-                <span>{{ item.label }}</span>
+        <div class="scope-metrics scope-metrics--studio">
+            <div v-for="item in heroStats" :key="item.label">
+                <span>{{ t(item.label) }}</span>
                 <strong>{{ item.value }}</strong>
             </div>
         </div>
-        <div class="action-row action-row--stacked">
-            <el-button type="primary" @click="openCompose()">Compose</el-button>
-            <el-button :loading="state.syncing" @click="syncCurrentScope()">{{ currentScopeMailbox ? 'Sync current mailbox' : 'Sync all mailboxes' }}</el-button>
-            <el-button @click="openRulesDrawer()">Rules Center</el-button>
+        <div class="rail-actions">
+            <el-button type="primary" @click="openCompose()">{{ t('Compose') }}</el-button>
+            <el-button :loading="state.syncing" @click="syncCurrentScope()">{{ t('Sync now') }}</el-button>
+            <el-button @click="openRulesDrawer()">{{ t('Rules') }}</el-button>
         </div>
     </article>
 
-    <article class="glass-panel rail-panel">
+    <article class="glass-panel rail-panel rail-panel--tree">
         <div class="section-head section-head--compact">
             <div>
                 <p class="section-kicker">Mail Structure</p>
                 <h3>Folders and accounts</h3>
             </div>
-            <el-button text @click="openMailboxDrawer('create')">Add mailbox</el-button>
+            <el-button text @click="openMailboxDrawer('create')">{{ t('Add Mailbox') }}</el-button>
         </div>
 
         <div class="folder-tree">
@@ -863,23 +863,23 @@ const messageTemplate = `
 
     <div class="lane-summary lane-summary--inbox">
         <div>
-            <span>Current scope</span>
+            <span>{{ t('Scope') }}</span>
             <strong>{{ currentScopeLabel }}</strong>
         </div>
         <div>
-            <span>View mode</span>
-            <strong>{{ INBOX_VIEW_MODES.find((item) => item.key === state.emailViewMode)?.label || 'Threads' }}</strong>
+            <span>{{ t('View') }}</span>
+            <strong>{{ t(INBOX_VIEW_MODES.find((item) => item.key === state.emailViewMode)?.label || 'Threads') }}</strong>
         </div>
         <div>
-            <span>Results</span>
+            <span>{{ t('Total') }}</span>
             <strong>{{ state.emailTotal }}</strong>
         </div>
         <div>
-            <span>Unread</span>
+            <span>{{ t('Unread') }}</span>
             <strong>{{ currentScopeStats.unread || 0 }}</strong>
         </div>
         <div>
-            <span>Archived</span>
+            <span>{{ t('Archived') }}</span>
             <strong>{{ currentScopeStats.archived || 0 }}</strong>
         </div>
     </div>
@@ -893,7 +893,7 @@ const messageTemplate = `
             :class="{ 'is-active': state.emailViewMode === item.key }"
             @click="switchViewMode(item.key)"
         >
-            {{ item.label }}
+            {{ t(item.label) }}
         </button>
     </div>
 
@@ -1196,7 +1196,7 @@ export const InboxView = {
         RulesDrawer,
     },
     template: `
-    <section class="desk-shell inbox-shell">
+    <section class="desk-shell inbox-shell inbox-shell--studio">
         <aside class="desk-rail" v-if="!state.isMobile">
             <RailColumn />
         </aside>
