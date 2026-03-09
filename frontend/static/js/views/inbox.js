@@ -21,10 +21,10 @@ const RECENT_SEARCHES_KEY = 'jmail_inbox_recent_searches';
 const RULE_TEMPLATES = [
     {
         key: 'archive-sender',
-        title: '同发件人归档',
-        copy: '把固定发件人的通知自动沉到归档。',
+        title: 'Archive by sender',
+        copy: 'Move repetitive sender-based notifications out of the active inbox.',
         build: () => ({
-            name: '同发件人自动归档',
+            name: 'Archive sender notifications',
             match_field: 'sender',
             match_operator: 'contains',
             match_value: '',
@@ -34,10 +34,10 @@ const RULE_TEMPLATES = [
     },
     {
         key: 'flag-subject',
-        title: '主题命中星标',
-        copy: '含关键字的会话自动提级为重点。',
+        title: 'Flag by subject',
+        copy: 'Escalate conversations when the subject contains a key phrase.',
         build: () => ({
-            name: '主题关键字星标',
+            name: 'Flag messages by subject',
             match_field: 'subject',
             match_operator: 'contains',
             match_value: '',
@@ -47,10 +47,10 @@ const RULE_TEMPLATES = [
     },
     {
         key: 'attachments-read',
-        title: '附件邮件已读',
-        copy: '对批量附件通知做自动清理。',
+        title: 'Mark attachment mail as read',
+        copy: 'Reduce review time for repetitive attachment notifications.',
         build: () => ({
-            name: '附件类邮件自动已读',
+            name: 'Mark attachment notices as read',
             match_field: 'attachments',
             match_operator: 'contains',
             match_value: '',
@@ -106,19 +106,19 @@ function buildSearchRecord(store) {
         return null;
     }
 
-    const scopeLabel = store.currentScopeMailbox?.value?.name || store.currentScopeMailbox?.value?.email || '全部邮箱';
-    const statusLabel = EMAIL_FILTERS.find((item) => item.key === store.state.emailStatus)?.label || '收件箱';
+    const scopeLabel = store.currentScopeMailbox?.value?.name || store.currentScopeMailbox?.value?.email || 'All mailboxes';
+    const statusLabel = EMAIL_FILTERS.find((item) => item.key === store.state.emailStatus)?.label || 'Inbox';
     const fieldLabel = fields.includes('all')
-        ? '全部字段'
+        ? 'All fields'
         : SEARCH_FIELD_OPTIONS.filter((item) => fields.includes(item.key)).map((item) => item.label).join(' / ');
     const extras = [];
-    if (store.state.searchHasAttachments === true) extras.push('仅附件');
-    if (store.state.searchHasAttachments === false) extras.push('排除附件');
-    if (store.state.searchDateFrom || store.state.searchDateTo) extras.push('时间筛选');
+    if (store.state.searchHasAttachments === true) extras.push('With attachments');
+    if (store.state.searchHasAttachments === false) extras.push('Without attachments');
+    if (store.state.searchDateFrom || store.state.searchDateTo) extras.push('Date filter');
 
     return {
         id: `${query}|${store.state.emailScope}|${store.state.emailStatus}|${fields.join(',')}|${store.state.searchHasAttachments}|${store.state.searchDateFrom}|${store.state.searchDateTo}`,
-        label: query || `${statusLabel} · ${scopeLabel}`,
+        label: query || `${statusLabel} / ${scopeLabel}`,
         query,
         scope: store.state.emailScope,
         status: store.state.emailStatus,
@@ -126,16 +126,16 @@ function buildSearchRecord(store) {
         hasAttachments: store.state.searchHasAttachments,
         dateFrom: store.state.searchDateFrom,
         dateTo: store.state.searchDateTo,
-        meta: [scopeLabel, statusLabel, fieldLabel, ...extras].filter(Boolean).join(' · '),
+        meta: [scopeLabel, statusLabel, fieldLabel, ...extras].filter(Boolean).join(' / '),
     };
 }
 
 function buildRuleDraftFromEmail(email) {
     const subject = normalizeThreadSubject(email?.subject);
     const sender = email?.from_address || '';
-    const senderName = email?.from_name || sender || '来信';
+    const senderName = email?.from_name || sender || 'Sender';
     return {
-        name: sender ? `处理 ${senderName}` : `处理 ${subject}`,
+        name: sender ? `Handle ${senderName}` : `Handle ${subject}`,
         mailbox_id: email?.mailbox_id ? String(email.mailbox_id) : '',
         match_field: sender ? 'sender' : 'subject',
         match_operator: 'contains',
@@ -182,13 +182,13 @@ function useInboxWorkspace() {
         count: store.getFilterCount(filter.key),
         droppable: ['all', 'archived', 'deleted'].includes(filter.key),
         icon: ({
-            all: '收',
-            unread: '未',
-            flagged: '星',
-            read: '读',
-            archived: '档',
-            deleted: '删',
-        })[filter.key] || '箱',
+            all: 'IN',
+            unread: 'UN',
+            flagged: 'FG',
+            read: 'RD',
+            archived: 'AR',
+            deleted: 'DL',
+        })[filter.key] || 'MB',
     })));
     const mailboxBranches = computed(() => store.state.mailboxes.map((mailbox) => {
         const stats = store.getMailboxStats(mailbox.id);
@@ -196,16 +196,16 @@ function useInboxWorkspace() {
             mailbox,
             expanded: inboxUi.branchOpen[mailbox.id] !== false,
             folders: [
-                { key: `mailbox:${mailbox.id}:all`, label: '收件箱', status: 'all', count: Number(stats.total || 0), droppable: true },
-                { key: `mailbox:${mailbox.id}:archived`, label: '已归档', status: 'archived', count: Number(stats.archived || 0), droppable: true },
-                { key: `mailbox:${mailbox.id}:deleted`, label: '已删除', status: 'deleted', count: Number(stats.deleted || 0), droppable: true },
+                { key: `mailbox:${mailbox.id}:all`, label: 'Inbox', status: 'all', count: Number(stats.total || 0), droppable: true },
+                { key: `mailbox:${mailbox.id}:archived`, label: 'Archived', status: 'archived', count: Number(stats.archived || 0), droppable: true },
+                { key: `mailbox:${mailbox.id}:deleted`, label: 'Deleted', status: 'deleted', count: Number(stats.deleted || 0), droppable: true },
             ],
         };
     }));
     const searchSummaryChips = computed(() => {
         const chips = [];
         if (store.state.emailQuery.trim()) {
-            chips.push(`关键词 ${store.state.emailQuery.trim()}`);
+            chips.push(`Query ${store.state.emailQuery.trim()}`);
         }
         if (!store.state.searchFields.includes('all')) {
             const fields = SEARCH_FIELD_OPTIONS
@@ -213,38 +213,38 @@ function useInboxWorkspace() {
                 .map((item) => item.label)
                 .join(' / ');
             if (fields) {
-                chips.push(`字段 ${fields}`);
+                chips.push(`Fields ${fields}`);
             }
         }
         if (store.state.searchHasAttachments === true) {
-            chips.push('仅附件邮件');
+            chips.push('With attachments');
         }
         if (store.state.searchHasAttachments === false) {
-            chips.push('排除附件');
+            chips.push('Without attachments');
         }
         if (store.state.searchDateFrom || store.state.searchDateTo) {
-            chips.push(`时间 ${store.state.searchDateFrom || '开始'} 至 ${store.state.searchDateTo || '现在'}`);
+            chips.push(`Date ${store.state.searchDateFrom || 'Start'} to ${store.state.searchDateTo || 'Now'}`);
         }
         if (store.state.emailScope !== EMAIL_SCOPE_ALL) {
-            chips.push(`邮箱 ${store.currentScopeLabel.value}`);
+            chips.push(`Mailbox ${store.currentScopeLabel.value}`);
         }
         if (store.state.emailStatus !== 'all') {
-            chips.push(`文件夹 ${EMAIL_FILTERS.find((item) => item.key === store.state.emailStatus)?.label || store.state.emailStatus}`);
+            chips.push(`Folder ${EMAIL_FILTERS.find((item) => item.key === store.state.emailStatus)?.label || store.state.emailStatus}`);
         }
         return chips;
     });
     const conversationItems = computed(() => [...store.state.emailConversation]
         .sort((left, right) => new Date(right?.received_at || right?.sent_at || 0) - new Date(left?.received_at || left?.sent_at || 0)));
-    const ruleCountLabel = computed(() => `${store.activeRuleCount.value || 0} 条运行中`);
+    const ruleCountLabel = computed(() => `${store.activeRuleCount.value || 0} active`);
     const drawerDirection = computed(() => store.state.isMobile ? 'btt' : 'rtl');
     const drawerSize = computed(() => store.state.isMobile ? '92%' : '480px');
 
     const mailboxNameById = (mailboxId) => {
         if (!mailboxId) {
-            return '全部邮箱';
+            return 'All mailboxes';
         }
         const mailbox = store.state.mailboxes.find((item) => item.id === Number(mailboxId));
-        return mailbox?.name || mailbox?.email || '指定邮箱';
+        return mailbox?.name || mailbox?.email || 'Selected mailbox';
     };
 
     const openMailboxBranch = (mailboxId) => {
@@ -446,14 +446,14 @@ function useInboxWorkspace() {
         });
     };
 
-    const ruleFieldLabel = (key) => RULE_FIELD_OPTIONS.find((item) => item.key === key)?.label || key || '字段';
-    const ruleActionLabel = (key) => RULE_ACTION_OPTIONS.find((item) => item.key === key)?.label || key || '动作';
+    const ruleFieldLabel = (key) => RULE_FIELD_OPTIONS.find((item) => item.key === key)?.label || key || 'Field';
+    const ruleActionLabel = (key) => RULE_ACTION_OPTIONS.find((item) => item.key === key)?.label || key || 'Action';
     const ruleOperatorLabel = (key) => ({
-        contains: '包含',
-        equals: '完全匹配',
-        starts_with: '开头匹配',
-        ends_with: '结尾匹配',
-    })[key] || key || '匹配';
+        contains: 'Contains',
+        equals: 'Equals',
+        starts_with: 'Starts with',
+        ends_with: 'Ends with',
+    })[key] || key || 'Match';
 
     const messageStatusTone = (email) => {
         if (email?.status === 'deleted') return 'danger';
@@ -522,11 +522,11 @@ const railTemplate = `
     <article class="glass-panel rail-panel rail-panel--hero">
         <div class="section-head section-head--compact">
             <div>
-                <p class="section-kicker">当前范围</p>
+                <p class="section-kicker">Current Scope</p>
                 <h3>{{ currentScopeLabel }}</h3>
             </div>
             <span class="status-pill" :data-tone="currentScopeMailbox ? mailboxStatusTone(currentScopeMailbox.status) : 'success'">
-                {{ currentScopeMailbox ? mailboxStatusLabel(currentScopeMailbox.status) : '全部邮箱' }}
+                {{ currentScopeMailbox ? mailboxStatusLabel(currentScopeMailbox.status) : 'All Mailboxes' }}
             </span>
         </div>
         <p class="rail-copy">{{ currentScopeDescription }}</p>
@@ -537,29 +537,26 @@ const railTemplate = `
             </div>
         </div>
         <div class="action-row action-row--stacked">
-            <el-button type="primary" round @click="openCompose()">写邮件</el-button>
-            <el-button round :loading="state.syncing" @click="syncCurrentScope()">{{ currentScopeMailbox ? '同步当前邮箱' : '同步全部邮箱' }}</el-button>
-            <el-button round plain @click="openRulesDrawer()">
-                规则入口
-                <span class="action-row__hint">{{ ruleCountLabel }}</span>
-            </el-button>
+            <el-button type="primary" @click="openCompose()">Compose</el-button>
+            <el-button :loading="state.syncing" @click="syncCurrentScope()">{{ currentScopeMailbox ? 'Sync current mailbox' : 'Sync all mailboxes' }}</el-button>
+            <el-button @click="openRulesDrawer()">Rules Center</el-button>
         </div>
     </article>
 
     <article class="glass-panel rail-panel">
         <div class="section-head section-head--compact">
             <div>
-                <p class="section-kicker">文件夹树</p>
-                <h3>统一与分账户</h3>
+                <p class="section-kicker">Mail Structure</p>
+                <h3>Folders and accounts</h3>
             </div>
-            <el-button text @click="openMailboxDrawer('create')">新增邮箱</el-button>
+            <el-button text @click="openMailboxDrawer('create')">Add mailbox</el-button>
         </div>
 
         <div class="folder-tree">
             <section class="folder-tree__group">
                 <header class="folder-tree__head">
-                    <span>智能文件夹</span>
-                    <small>拖放支持收件箱 / 归档 / 已删除</small>
+                    <span>Smart folders</span>
+                    <small>Drag to all mail, archive or deleted</small>
                 </header>
                 <button
                     v-for="node in smartFolders"
@@ -589,8 +586,8 @@ const railTemplate = `
 
             <section class="folder-tree__group">
                 <header class="folder-tree__head">
-                    <span>邮箱分支</span>
-                    <small>{{ state.mailboxes.length }} 个账户</small>
+                    <span>Mailboxes</span>
+                    <small>{{ state.mailboxes.length }} accounts</small>
                 </header>
                 <article v-for="branch in mailboxBranches" :key="branch.mailbox.id" class="folder-branch">
                     <button type="button" class="folder-branch__head" @click="openMailboxBranch(branch.mailbox.id)">
@@ -633,8 +630,8 @@ const railTemplate = `
 
             <section class="folder-tree__group">
                 <header class="folder-tree__head">
-                    <span>规则入口</span>
-                    <small>可拖入当前邮件生成草案</small>
+                    <span>Automation</span>
+                    <small>Drop a message here to seed a rule</small>
                 </header>
                 <button
                     type="button"
@@ -646,9 +643,9 @@ const railTemplate = `
                     @dragleave="inboxUi.dragTarget = inboxUi.dragTarget === 'rule-drop' ? '' : inboxUi.dragTarget"
                     @drop.prevent="handleFolderDrop({ key: 'rule-drop', kind: 'rule' })"
                 >
-                    <span class="folder-node__icon">规</span>
+                    <span class="folder-node__icon">RL</span>
                     <div class="folder-node__copy">
-                        <strong>规则工作台</strong>
+                        <strong>Rules Center</strong>
                         <small>{{ ruleCountLabel }}</small>
                     </div>
                     <b>{{ state.rules.length }}</b>
@@ -656,38 +653,22 @@ const railTemplate = `
             </section>
         </div>
     </article>
-
-    <article class="glass-panel rail-panel rail-panel--micro">
-        <div class="section-head section-head--compact">
-            <div>
-                <p class="section-kicker">当前配额</p>
-                <h3>{{ state.mailboxes.length }} / {{ state.user?.max_mailboxes || 0 }}</h3>
-            </div>
-        </div>
-        <div class="quota-bar">
-            <span :style="{ width: mailboxUsagePercent + '%' }"></span>
-        </div>
-        <p class="rail-copy">统一收件箱先让你看清全局，文件夹树再负责把处理动作落到每个邮箱。</p>
-    </article>
 </div>`;
 
-const readerTemplate = `
-<div v-if="state.emailDetail" class="reader-stack" :class="{ 'is-mobile': mobile }">
+const readerTemplate = `<div v-if="state.emailDetail" class="reader-stack" :class="{ 'is-mobile': mobile }">
     <header class="reader-header">
         <div class="reader-header__copy">
-            <p class="section-kicker">阅读窗格</p>
-            <h2>{{ state.emailDetail.subject || '(无主题)' }}</h2>
+            <p class="section-kicker">Message Detail</p>
+            <h2>{{ state.emailDetail.subject || '(No subject)' }}</h2>
             <div class="reader-meta-line">
-                <span class="status-pill" :data-tone="messageStatusTone(state.emailDetail)">
-                    {{ emailStatusLabel(state.emailDetail.status) }}
-                </span>
-                <span class="status-pill" v-if="state.emailDetail.is_flagged" data-tone="warning">星标</span>
-                <span class="status-pill" v-if="state.emailDetail.has_attachments" data-tone="info">附件</span>
+                <span class="status-pill" :data-tone="messageStatusTone(state.emailDetail)">{{ emailStatusLabel(state.emailDetail.status) }}</span>
+                <span class="status-pill" v-if="state.emailDetail.is_flagged" data-tone="warning">Flagged</span>
+                <span class="status-pill" v-if="state.emailDetail.has_attachments" data-tone="info">Attachment</span>
                 <span class="status-pill" data-tone="muted">{{ currentMailboxLabelForEmail(state.emailDetail) }}</span>
             </div>
         </div>
         <div class="reader-header__side">
-            <button v-if="mobile" type="button" class="ghost-button" @click="state.mobileReaderOpen = false">返回列表</button>
+            <button v-if="mobile" type="button" class="ghost-button" @click="state.mobileReaderOpen = false">Back to list</button>
             <span>{{ formatRelativeTime(state.emailDetail.sent_at || state.emailDetail.received_at) }}</span>
             <span>{{ formatDateTime(state.emailDetail.sent_at || state.emailDetail.received_at) }}</span>
         </div>
@@ -695,27 +676,27 @@ const readerTemplate = `
 
     <div class="reader-actions" :class="{ 'reader-actions--deleted': state.emailDetail.status === 'deleted' }">
         <template v-if="state.emailDetail.status !== 'deleted'">
-            <el-button round @click="replyToEmail(state.emailDetail)">回复</el-button>
-            <el-button round @click="toggleReadState(state.emailDetail)">{{ state.emailDetail.status === 'read' ? '标记未读' : '标记已读' }}</el-button>
-            <el-button round @click="toggleStarState(state.emailDetail)">{{ state.emailDetail.is_flagged ? '取消星标' : '设为星标' }}</el-button>
-            <el-button v-if="state.emailDetail.status !== 'archived'" round @click="archiveEmail(state.emailDetail)">归档</el-button>
-            <el-button v-else round type="success" plain @click="unarchiveEmail(state.emailDetail)">移回收件箱</el-button>
-            <el-button round type="danger" plain @click="deleteEmail(state.emailDetail)">删除</el-button>
+            <el-button @click="replyToEmail(state.emailDetail)">Reply</el-button>
+            <el-button @click="toggleReadState(state.emailDetail)">{{ state.emailDetail.status === 'read' ? 'Mark unread' : 'Mark read' }}</el-button>
+            <el-button @click="toggleStarState(state.emailDetail)">{{ state.emailDetail.is_flagged ? 'Remove flag' : 'Flag' }}</el-button>
+            <el-button v-if="state.emailDetail.status !== 'archived'" @click="archiveEmail(state.emailDetail)">Archive</el-button>
+            <el-button v-else type="success" plain @click="unarchiveEmail(state.emailDetail)">Move to inbox</el-button>
+            <el-button type="danger" plain @click="deleteEmail(state.emailDetail)">Delete</el-button>
         </template>
         <template v-else>
-            <el-button round type="success" plain @click="restoreEmail(state.emailDetail)">恢复到收件箱</el-button>
-            <el-button round type="danger" plain @click="purgeEmail(state.emailDetail)">彻底删除</el-button>
-            <span class="reader-actions__hint">已删除邮件会被隔离出主工作流，恢复后才能再次归档、回复或标记。</span>
+            <el-button type="success" plain @click="restoreEmail(state.emailDetail)">Restore to inbox</el-button>
+            <el-button type="danger" plain @click="purgeEmail(state.emailDetail)">Permanently delete</el-button>
+            <span class="reader-actions__hint">Deleted messages leave the main workflow until they are restored.</span>
         </template>
     </div>
 
     <article class="glass-subpanel conversation-panel">
         <div class="section-head section-head--compact">
             <div>
-                <p class="section-kicker">会话时间线</p>
-                <h3>{{ conversationItems.length || 1 }} 封邮件</h3>
+                <p class="section-kicker">Conversation</p>
+                <h3>{{ conversationItems.length || 1 }} messages</h3>
             </div>
-            <span class="status-pill" data-tone="info">{{ state.conversationLoading ? '载入中' : '已聚合' }}</span>
+            <span class="status-pill" data-tone="info">{{ state.conversationLoading ? 'Loading' : 'Grouped' }}</span>
         </div>
         <div class="conversation-list" v-loading="state.conversationLoading">
             <button
@@ -730,16 +711,16 @@ const readerTemplate = `
                     <strong>{{ formatSenderLine(item.from_name, item.from_address) }}</strong>
                     <span>{{ formatRelativeTime(item.sent_at || item.received_at) }}</span>
                 </div>
-                <p>{{ item.preview_text || item.subject || '暂无预览' }}</p>
+                <p>{{ item.preview_text || item.subject || 'No preview available' }}</p>
                 <div class="conversation-item__meta">
                     <span>{{ emailStatusLabel(item.status) }}</span>
-                    <span v-if="item.has_attachments">附件</span>
-                    <span v-if="item.is_flagged">星标</span>
+                    <span v-if="item.has_attachments">Attachment</span>
+                    <span v-if="item.is_flagged">Flagged</span>
                 </div>
             </button>
             <div v-if="!conversationItems.length" class="conversation-item conversation-item--empty">
-                <strong>当前会话只有这一封邮件</strong>
-                <p>后续同主题来信会自动聚合到这里。</p>
+                <strong>This conversation contains a single message</strong>
+                <p>Future messages with the same thread key will appear here.</p>
             </div>
         </div>
     </article>
@@ -747,26 +728,26 @@ const readerTemplate = `
     <article class="reader-card">
         <div class="reader-grid">
             <div>
-                <span>发件人</span>
+                <span>Sender</span>
                 <strong>{{ formatSenderLine(state.emailDetail.from_name, state.emailDetail.from_address) }}</strong>
             </div>
             <div>
-                <span>收件人</span>
-                <strong>{{ formatAddressList(state.emailDetail.to_addresses) || '未记录' }}</strong>
+                <span>Recipients</span>
+                <strong>{{ formatAddressList(state.emailDetail.to_addresses) || 'Not recorded' }}</strong>
             </div>
             <div>
-                <span>抄送</span>
-                <strong>{{ formatAddressList(state.emailDetail.cc_addresses) || '无' }}</strong>
+                <span>CC</span>
+                <strong>{{ formatAddressList(state.emailDetail.cc_addresses) || 'None' }}</strong>
             </div>
             <div>
-                <span>时间</span>
+                <span>Time</span>
                 <strong>{{ formatDateTime(state.emailDetail.sent_at || state.emailDetail.received_at) }}</strong>
             </div>
         </div>
 
         <div v-if="emailAttachments.length" class="attachment-strip">
             <div class="attachment-chip" v-for="attachment in emailAttachments" :key="attachment.filename + '-' + attachment.size">
-                <strong>{{ attachment.filename || '附件' }}</strong>
+                <strong>{{ attachment.filename || 'Attachment' }}</strong>
                 <span>{{ formatFileSize(attachment.size || 0) }}</span>
             </div>
         </div>
@@ -778,14 +759,14 @@ const readerTemplate = `
                 :srcdoc="buildEmailIframeDocument(state.emailDetail.html_content)"
                 sandbox=""
             ></iframe>
-            <pre v-else class="reader-pre">{{ state.emailDetail.text_content || '暂无正文' }}</pre>
+            <pre v-else class="reader-pre">{{ state.emailDetail.text_content || 'No message body available' }}</pre>
         </div>
     </article>
 </div>
 <div v-else class="empty-panel empty-panel--reader">
-    <div class="empty-panel__icon">阅</div>
-    <h3>选择一封邮件开始阅读</h3>
-    <p>左侧文件夹树可切换统一收件箱、单邮箱文件夹与规则入口，阅读窗格会自动保持会话上下文。</p>
+    <div class="empty-panel__icon">RD</div>
+    <h3>Select a message to start reading</h3>
+    <p>The detail pane stays aligned with list selection and conversation context.</p>
 </div>`;
 
 const RailColumn = {
@@ -795,275 +776,263 @@ const RailColumn = {
     },
 };
 
-const MessageColumn = {
-    template: `
-    <article class="glass-panel lane-panel lane-panel--inbox">
-        <header class="lane-toolbar lane-toolbar--inbox">
-            <div class="lane-toolbar__search lane-toolbar__search--wide">
-                <el-input
-                    :ref="bindEmailSearchInput"
-                    v-model="state.emailQuery"
-                    size="large"
-                    clearable
-                    placeholder="统一搜索全部邮箱、主题、发件人和正文"
-                    @keyup.enter="applySearch()"
-                />
-                <el-button round type="primary" @click="applySearch()">搜索</el-button>
+const messageTemplate = `
+<article class="glass-panel lane-panel lane-panel--inbox">
+    <header class="lane-toolbar lane-toolbar--inbox">
+        <div class="lane-toolbar__search lane-toolbar__search--wide">
+            <el-input
+                :ref="bindEmailSearchInput"
+                v-model="state.emailQuery"
+                size="large"
+                clearable
+                placeholder="Search subject, sender, recipients or body"
+                @keyup.enter="applySearch()"
+            />
+            <el-button type="primary" @click="applySearch()">Search</el-button>
+        </div>
+        <div class="lane-toolbar__actions lane-toolbar__actions--dense">
+            <button type="button" class="ghost-button" @click="inboxUi.searchPanelOpen = !inboxUi.searchPanelOpen">
+                {{ inboxUi.searchPanelOpen ? 'Hide filters' : 'Advanced filters' }}
+            </button>
+            <button type="button" class="ghost-button" @click="openRulesDrawer()">Rules</button>
+            <button v-if="state.isMobile" type="button" class="ghost-button" @click="state.mobileRailOpen = true">Folders</button>
+            <button v-if="state.isMobile && state.selectedEmailId" type="button" class="ghost-button" @click="openSelectedEmailOnMobile()">Open detail</button>
+            <button v-if="hasInboxFilters" type="button" class="ghost-button" @click="clearInboxQuery()">Clear</button>
+        </div>
+    </header>
+
+    <section v-if="inboxUi.searchPanelOpen" class="search-panel glass-subpanel">
+        <div class="section-head section-head--compact">
+            <div>
+                <p class="section-kicker">Advanced Search</p>
+                <h3>Combine fields, dates and attachments</h3>
             </div>
-            <div class="lane-toolbar__actions lane-toolbar__actions--dense">
-                <button type="button" class="ghost-button" @click="inboxUi.searchPanelOpen = !inboxUi.searchPanelOpen">
-                    {{ inboxUi.searchPanelOpen ? '收起搜索器' : '高级搜索' }}
-                </button>
-                <button type="button" class="ghost-button" @click="openRulesDrawer()">规则</button>
-                <button v-if="state.isMobile" type="button" class="ghost-button" @click="state.mobileRailOpen = true">文件夹树</button>
-                <button v-if="state.isMobile && state.selectedEmailId" type="button" class="ghost-button" @click="openSelectedEmailOnMobile()">打开阅读</button>
-                <button v-if="hasInboxFilters" type="button" class="ghost-button" @click="clearInboxQuery()">清空</button>
-            </div>
-        </header>
-
-        <section v-if="inboxUi.searchPanelOpen" class="search-panel glass-subpanel">
-            <div class="section-head section-head--compact">
-                <div>
-                    <p class="section-kicker">跨邮箱统一搜索</p>
-                    <h3>字段、时间与附件联合筛选</h3>
-                </div>
-                <span class="status-pill" data-tone="info">{{ state.emailScope === EMAIL_SCOPE_ALL ? '全部邮箱' : currentScopeLabel }}</span>
-            </div>
-
-            <div class="search-panel__grid">
-                <div class="search-panel__section">
-                    <span class="search-panel__label">搜索字段</span>
-                    <div class="chip-toggle-row">
-                        <button
-                            v-for="field in SEARCH_FIELD_OPTIONS"
-                            :key="field.key"
-                            type="button"
-                            class="chip-toggle"
-                            :class="{ 'is-active': state.searchFields.includes(field.key) }"
-                            @click="toggleSearchField(field.key)"
-                        >
-                            {{ field.label }}
-                        </button>
-                    </div>
-                </div>
-
-                <div class="search-panel__section">
-                    <span class="search-panel__label">附件条件</span>
-                    <div class="chip-toggle-row">
-                        <button type="button" class="chip-toggle" :class="{ 'is-active': state.searchHasAttachments === null }" @click="setAttachmentFilter(null)">不限</button>
-                        <button type="button" class="chip-toggle" :class="{ 'is-active': state.searchHasAttachments === true }" @click="setAttachmentFilter(true)">仅附件</button>
-                        <button type="button" class="chip-toggle" :class="{ 'is-active': state.searchHasAttachments === false }" @click="setAttachmentFilter(false)">无附件</button>
-                    </div>
-                </div>
-
-                <label class="search-field">
-                    <span>开始日期</span>
-                    <input v-model="state.searchDateFrom" type="date" />
-                </label>
-
-                <label class="search-field">
-                    <span>结束日期</span>
-                    <input v-model="state.searchDateTo" type="date" />
-                </label>
-            </div>
-
-            <div v-if="searchSummaryChips.length" class="search-chip-row">
-                <span v-for="chip in searchSummaryChips" :key="chip" class="search-chip">{{ chip }}</span>
-            </div>
-
-            <div v-if="inboxUi.recentSearches.length" class="search-recent">
-                <span class="search-panel__label">最近搜索</span>
-                <div class="search-recent__row">
-                    <button v-for="item in inboxUi.recentSearches" :key="item.id" type="button" class="search-recent__item" @click="useRecentSearch(item)">
-                        <strong>{{ item.label }}</strong>
-                        <small>{{ item.meta }}</small>
+            <span class="status-pill" data-tone="info">{{ state.emailScope === EMAIL_SCOPE_ALL ? 'All mailboxes' : currentScopeLabel }}</span>
+        </div>
+        <div class="search-panel__grid">
+            <div class="search-panel__section">
+                <span class="search-panel__label">Fields</span>
+                <div class="chip-toggle-row">
+                    <button
+                        v-for="field in SEARCH_FIELD_OPTIONS"
+                        :key="field.key"
+                        type="button"
+                        class="chip-toggle"
+                        :class="{ 'is-active': state.searchFields.includes(field.key) }"
+                        @click="toggleSearchField(field.key)"
+                    >
+                        {{ field.label }}
                     </button>
                 </div>
             </div>
-        </section>
 
-        <div class="lane-summary lane-summary--inbox">
-            <div>
-                <span>当前范围</span>
-                <strong>{{ currentScopeLabel }}</strong>
+            <div class="search-panel__section">
+                <span class="search-panel__label">Attachments</span>
+                <div class="chip-toggle-row">
+                    <button type="button" class="chip-toggle" :class="{ 'is-active': state.searchHasAttachments === null }" @click="setAttachmentFilter(null)">Any</button>
+                    <button type="button" class="chip-toggle" :class="{ 'is-active': state.searchHasAttachments === true }" @click="setAttachmentFilter(true)">Has attachments</button>
+                    <button type="button" class="chip-toggle" :class="{ 'is-active': state.searchHasAttachments === false }" @click="setAttachmentFilter(false)">No attachments</button>
+                </div>
             </div>
-            <div>
-                <span>视图模式</span>
-                <strong>{{ INBOX_VIEW_MODES.find((item) => item.key === state.emailViewMode)?.label || '会话视图' }}</strong>
-            </div>
-            <div>
-                <span>结果</span>
-                <strong>{{ state.emailTotal }}</strong>
-            </div>
-            <div>
-                <span>未读</span>
-                <strong>{{ currentScopeStats.unread || 0 }}</strong>
-            </div>
-            <div>
-                <span>已归档</span>
-                <strong>{{ currentScopeStats.archived || 0 }}</strong>
-            </div>
+
+            <label class="search-field">
+                <span>Start date</span>
+                <input v-model="state.searchDateFrom" type="date" />
+            </label>
+
+            <label class="search-field">
+                <span>End date</span>
+                <input v-model="state.searchDateTo" type="date" />
+            </label>
         </div>
 
-        <div class="view-switch-row">
-            <button
-                v-for="item in INBOX_VIEW_MODES"
-                :key="item.key"
-                type="button"
-                class="chip-toggle view-switch"
-                :class="{ 'is-active': state.emailViewMode === item.key }"
-                @click="switchViewMode(item.key)"
-            >
-                {{ item.label }}
-            </button>
+        <div v-if="searchSummaryChips.length" class="search-chip-row">
+            <span v-for="chip in searchSummaryChips" :key="chip" class="search-chip">{{ chip }}</span>
         </div>
 
-        <div v-if="inboxUi.dragIds.length" class="drop-hint">
-            正在拖动 {{ inboxUi.dragIds.length }} 封邮件，可拖到左侧的收件箱、已归档、已删除或规则入口。
-        </div>
-
-        <div v-if="state.emails.length" class="lane-bulkbar">
-            <div class="lane-bulkbar__meta">
-                <span>{{ state.emailViewMode === 'thread' ? '会话工作流' : '邮件工作流' }}</span>
-                <strong>{{ selectedEmailCount ? ('已选 ' + selectedEmailCount + ' 封') : ('本页 ' + state.emails.length + ' 封，可批量处理') }}</strong>
-            </div>
-            <div class="lane-bulkbar__actions">
-                <button type="button" class="ghost-button" @click="togglePageSelection()">
-                    {{ isPageSelectionFull ? '取消本页' : '全选本页' }}
+        <div v-if="inboxUi.recentSearches.length" class="search-recent">
+            <span class="search-panel__label">Recent searches</span>
+            <div class="search-recent__row">
+                <button v-for="item in inboxUi.recentSearches" :key="item.id" type="button" class="search-recent__item" @click="useRecentSearch(item)">
+                    <strong>{{ item.label }}</strong>
+                    <small>{{ item.meta }}</small>
                 </button>
-                <template v-if="selectedEmailCount">
-                    <template v-if="state.emailStatus === 'deleted'">
-                        <button type="button" class="ghost-button" @click="bulkRestoreSelected()">批量恢复</button>
-                        <button type="button" class="ghost-button ghost-button--danger" @click="bulkPurgeSelected()">彻底删除</button>
-                    </template>
-                    <template v-else-if="state.emailStatus === 'archived'">
-                        <button type="button" class="ghost-button" @click="moveEmailsToFolder(state.selectedEmailIds, 'all')">移回收件箱</button>
-                        <button type="button" class="ghost-button ghost-button--danger" @click="bulkDeleteSelected()">批量删除</button>
-                    </template>
-                    <template v-else>
-                        <button type="button" class="ghost-button" @click="bulkMarkRead(true)">批量已读</button>
-                        <button type="button" class="ghost-button" @click="bulkMarkRead(false)">批量未读</button>
-                        <button type="button" class="ghost-button" @click="bulkArchiveSelected()">批量归档</button>
-                        <button type="button" class="ghost-button ghost-button--danger" @click="bulkDeleteSelected()">批量删除</button>
-                    </template>
-                    <button type="button" class="ghost-button" @click="openRuleSeed(selectedEmails[0] || state.emailDetail)">生成规则</button>
-                    <button type="button" class="ghost-button" @click="clearEmailSelection()">清空勾选</button>
-                </template>
             </div>
         </div>
+    </section>
 
-        <div class="message-stream" v-loading="state.inboxLoading">
-            <template v-if="streamSections.length">
-                <section class="mail-group" v-for="group in streamSections" :key="group.key">
-                    <header class="mail-group__head">{{ group.label }}</header>
+    <div class="lane-summary lane-summary--inbox">
+        <div>
+            <span>Current scope</span>
+            <strong>{{ currentScopeLabel }}</strong>
+        </div>
+        <div>
+            <span>View mode</span>
+            <strong>{{ INBOX_VIEW_MODES.find((item) => item.key === state.emailViewMode)?.label || 'Threads' }}</strong>
+        </div>
+        <div>
+            <span>Results</span>
+            <strong>{{ state.emailTotal }}</strong>
+        </div>
+        <div>
+            <span>Unread</span>
+            <strong>{{ currentScopeStats.unread || 0 }}</strong>
+        </div>
+        <div>
+            <span>Archived</span>
+            <strong>{{ currentScopeStats.archived || 0 }}</strong>
+        </div>
+    </div>
 
-                    <template v-if="state.emailViewMode === 'thread'">
-                        <article
-                            v-for="thread in group.items"
-                            :key="thread.key"
-                            class="thread-card glass-subpanel"
-                            :class="{
-                                'is-active': isThreadActive(thread),
-                                'is-unread': thread.unread_count > 0
-                            }"
-                            draggable="true"
-                            @dragstart="startThreadDrag(thread, $event)"
-                            @dragend="clearDragState()"
-                        >
-                            <button type="button" class="thread-card__shell" @click="selectThread(thread, state.isMobile)">
-                                <div class="thread-card__top">
-                                    <div>
-                                        <strong>{{ thread.subject }}</strong>
-                                        <p>{{ thread.participants.join(' · ') || '未知参与者' }}</p>
-                                    </div>
-                                    <div class="thread-card__meta">
-                                        <span>{{ formatRelativeTime(thread.latest_received_at) }}</span>
-                                        <span class="thread-card__count">{{ thread.count }} 封</span>
+    <div class="view-switch-row">
+        <button
+            v-for="item in INBOX_VIEW_MODES"
+            :key="item.key"
+            type="button"
+            class="chip-toggle view-switch"
+            :class="{ 'is-active': state.emailViewMode === item.key }"
+            @click="switchViewMode(item.key)"
+        >
+            {{ item.label }}
+        </button>
+    </div>
+
+    <div v-if="inboxUi.dragIds.length" class="drop-hint">
+        Dragging {{ inboxUi.dragIds.length }} messages. Drop them on folders or the rules center.
+    </div>
+
+    <div v-if="state.emails.length" class="lane-bulkbar">
+        <div class="lane-bulkbar__meta">
+            <span>{{ state.emailViewMode === 'thread' ? 'Thread workflow' : 'Message workflow' }}</span>
+            <strong>{{ selectedEmailCount ? ('Selected ' + selectedEmailCount) : ('Current page ' + state.emails.length) }}</strong>
+        </div>
+        <div class="lane-bulkbar__actions">
+            <button type="button" class="ghost-button" @click="togglePageSelection()">
+                {{ isPageSelectionFull ? 'Clear page' : 'Select page' }}
+            </button>
+            <template v-if="selectedEmailCount">
+                <template v-if="state.emailStatus === 'deleted'">
+                    <button type="button" class="ghost-button" @click="bulkRestoreSelected()">Restore selected</button>
+                    <button type="button" class="ghost-button ghost-button--danger" @click="bulkPurgeSelected()">Permanently delete</button>
+                </template>
+                <template v-else-if="state.emailStatus === 'archived'">
+                    <button type="button" class="ghost-button" @click="moveEmailsToFolder(state.selectedEmailIds, 'all')">Move to inbox</button>
+                    <button type="button" class="ghost-button ghost-button--danger" @click="bulkDeleteSelected()">Delete selected</button>
+                </template>
+                <template v-else>
+                    <button type="button" class="ghost-button" @click="bulkMarkRead(true)">Mark read</button>
+                    <button type="button" class="ghost-button" @click="bulkMarkRead(false)">Mark unread</button>
+                    <button type="button" class="ghost-button" @click="bulkArchiveSelected()">Archive selected</button>
+                    <button type="button" class="ghost-button ghost-button--danger" @click="bulkDeleteSelected()">Delete selected</button>
+                </template>
+                <button type="button" class="ghost-button" @click="openRuleSeed(selectedEmails[0] || state.emailDetail)">Create rule</button>
+                <button type="button" class="ghost-button" @click="clearEmailSelection()">Clear selection</button>
+            </template>
+        </div>
+    </div>
+
+    <div class="message-stream" v-loading="state.inboxLoading">
+        <template v-if="streamSections.length">
+            <section class="mail-group" v-for="group in streamSections" :key="group.key">
+                <header class="mail-group__head">{{ group.label }}</header>
+
+                <template v-if="state.emailViewMode === 'thread'">
+                    <article
+                        v-for="thread in group.items"
+                        :key="thread.key"
+                        class="thread-card glass-subpanel"
+                        :class="{ 'is-active': isThreadActive(thread), 'is-unread': thread.unread_count > 0 }"
+                        draggable="true"
+                        @dragstart="startThreadDrag(thread, $event)"
+                        @dragend="clearDragState()"
+                    >
+                        <button type="button" class="thread-card__shell" @click="selectThread(thread, state.isMobile)">
+                            <div class="thread-card__top">
+                                <div>
+                                    <strong>{{ thread.subject }}</strong>
+                                    <p>{{ thread.participants.join(' / ') || 'Unknown participants' }}</p>
+                                </div>
+                                <div class="thread-card__meta">
+                                    <span>{{ formatRelativeTime(thread.latest_received_at) }}</span>
+                                    <span class="thread-card__count">{{ thread.count }} messages</span>
+                                </div>
+                            </div>
+                            <p class="thread-card__preview">{{ thread.preview_text || 'No preview available' }}</p>
+                            <div class="thread-card__footer">
+                                <span>{{ currentMailboxLabelForEmail(thread.latest_email) }}</span>
+                                <span v-if="thread.unread_count">Unread {{ thread.unread_count }}</span>
+                                <span v-if="thread.has_attachments">Attachment</span>
+                                <span v-if="thread.is_flagged">Flagged</span>
+                            </div>
+                        </button>
+                    </article>
+                </template>
+
+                <template v-else>
+                    <article
+                        v-for="email in group.items"
+                        :key="email.id"
+                        class="message-card"
+                        :class="{
+                            'is-active': state.selectedEmailId === email.id,
+                            'is-selected': isEmailSelected(email.id),
+                            'is-unread': email.status !== 'read' && email.status !== 'deleted' && email.status !== 'archived',
+                            'is-deleted': email.status === 'deleted',
+                            'is-archived': email.status === 'archived'
+                        }"
+                        draggable="true"
+                        @dragstart="startEmailDrag(email, $event)"
+                        @dragend="clearDragState()"
+                    >
+                        <div class="message-card__frame">
+                            <button type="button" class="message-card__select" :class="{ 'is-selected': isEmailSelected(email.id) }" @click.stop="toggleEmailSelection(email.id)">
+                                <span></span>
+                            </button>
+                            <button type="button" class="message-card__shell" @click="selectEmail(email, state.isMobile)">
+                                <div class="message-card__top">
+                                    <strong>{{ formatSenderLine(email.from_name, email.from_address) }}</strong>
+                                    <div class="message-card__time">
+                                        <span>{{ formatRelativeTime(email.sent_at || email.received_at) }}</span>
+                                        <span v-if="email.status === 'deleted'" class="message-card__badge">Deleted</span>
+                                        <span v-else-if="email.status === 'archived'" class="message-card__badge message-card__badge--archived">Archived</span>
                                     </div>
                                 </div>
-                                <p class="thread-card__preview">{{ thread.preview_text || '暂无预览' }}</p>
-                                <div class="thread-card__footer">
-                                    <span>{{ currentMailboxLabelForEmail(thread.latest_email) }}</span>
-                                    <span v-if="thread.unread_count">未读 {{ thread.unread_count }}</span>
-                                    <span v-if="thread.has_attachments">附件</span>
-                                    <span v-if="thread.is_flagged">星标</span>
+                                <h3>{{ email.subject || '(No subject)' }}</h3>
+                                <p>{{ email.preview_text || 'No preview available' }}</p>
+                                <div class="message-card__meta">
+                                    <span>{{ currentMailboxLabelForEmail(email) }}</span>
+                                    <span v-if="email.has_attachments">Attachment</span>
+                                    <span v-if="email.is_flagged">Flagged</span>
                                 </div>
                             </button>
-                        </article>
-                    </template>
-
-                    <template v-else>
-                        <article
-                            v-for="email in group.items"
-                            :key="email.id"
-                            class="message-card"
-                            :class="{
-                                'is-active': state.selectedEmailId === email.id,
-                                'is-selected': isEmailSelected(email.id),
-                                'is-unread': email.status !== 'read' && email.status !== 'deleted' && email.status !== 'archived',
-                                'is-deleted': email.status === 'deleted',
-                                'is-archived': email.status === 'archived'
-                            }"
-                            draggable="true"
-                            @dragstart="startEmailDrag(email, $event)"
-                            @dragend="clearDragState()"
-                        >
-                            <div class="message-card__frame">
-                                <button
-                                    type="button"
-                                    class="message-card__select"
-                                    :class="{ 'is-selected': isEmailSelected(email.id) }"
-                                    @click.stop="toggleEmailSelection(email.id)"
-                                >
-                                    <span></span>
-                                </button>
-                                <button
-                                    type="button"
-                                    class="message-card__shell"
-                                    @click="selectEmail(email, state.isMobile)"
-                                >
-                                    <div class="message-card__top">
-                                        <strong>{{ formatSenderLine(email.from_name, email.from_address) }}</strong>
-                                        <div class="message-card__time">
-                                            <span>{{ formatRelativeTime(email.sent_at || email.received_at) }}</span>
-                                            <span v-if="email.status === 'deleted'" class="message-card__badge">已删除</span>
-                                            <span v-else-if="email.status === 'archived'" class="message-card__badge message-card__badge--archived">已归档</span>
-                                        </div>
-                                    </div>
-                                    <h3>{{ email.subject || '(无主题)' }}</h3>
-                                    <p>{{ email.preview_text || '暂无预览' }}</p>
-                                    <div class="message-card__meta">
-                                        <span>{{ currentMailboxLabelForEmail(email) }}</span>
-                                        <span v-if="email.has_attachments">附件</span>
-                                        <span v-if="email.is_flagged">星标</span>
-                                    </div>
-                                </button>
-                            </div>
-                        </article>
-                    </template>
-                </section>
-            </template>
-            <div v-else class="empty-panel empty-panel--stream">
-                <div class="empty-panel__icon">箱</div>
-                <h3>这个范围里暂时没有邮件</h3>
-                <p>可以切换文件夹树、调整高级搜索，或先同步当前邮箱。</p>
-            </div>
+                        </div>
+                    </article>
+                </template>
+            </section>
+        </template>
+        <div v-else class="empty-panel empty-panel--stream">
+            <div class="empty-panel__icon">IN</div>
+            <h3>No messages in this scope</h3>
+            <p>Change folders, adjust filters or sync mailboxes to load more content.</p>
         </div>
+    </div>
 
-        <div class="pagination-wrap" v-if="state.emailTotal > 0">
-            <el-pagination
-                background
-                :layout="state.isMobile ? 'prev, pager, next' : 'total, sizes, prev, pager, next'"
-                :page-sizes="[20, 40, 80, 120]"
-                :page-size="state.emailPageSize"
-                :current-page="state.emailPage"
-                :total="state.emailTotal"
-                @current-change="handleEmailPageChange"
-                @size-change="handleEmailPageSizeChange"
-            />
-        </div>
-    </article>
-    `,
+    <div class="pagination-wrap" v-if="state.emailTotal > 0">
+        <el-pagination
+            background
+            :layout="state.isMobile ? 'prev, pager, next' : 'total, sizes, prev, pager, next'"
+            :page-sizes="[20, 40, 80, 120]"
+            :page-size="state.emailPageSize"
+            :current-page="state.emailPage"
+            :total="state.emailTotal"
+            @current-change="handleEmailPageChange"
+            @size-change="handleEmailPageSizeChange"
+        />
+    </div>
+</article>`;
+
+const MessageColumn = {
+    template: messageTemplate,
     setup() {
         return useInboxWorkspace();
     },
@@ -1089,25 +1058,19 @@ const RulesDrawer = {
         :direction="drawerDirection"
         :size="drawerSize"
         class="utility-drawer utility-drawer--rules"
-        title="规则工作台"
+        title="Rules Center"
     >
         <div class="rules-shell">
             <section class="glass-subpanel">
                 <div class="section-head section-head--compact">
                     <div>
-                        <p class="section-kicker">规则模板</p>
-                        <h3>快速起草</h3>
+                        <p class="section-kicker">Templates</p>
+                        <h3>Quick start</h3>
                     </div>
-                    <span class="status-pill" data-tone="info">{{ state.rules.length }} 条规则</span>
+                    <span class="status-pill" data-tone="info">{{ state.rules.length }} rules</span>
                 </div>
                 <div class="rule-template-grid">
-                    <button
-                        v-for="template in RULE_TEMPLATES"
-                        :key="template.key"
-                        type="button"
-                        class="rule-template"
-                        @click="applyRuleTemplate(template)"
-                    >
+                    <button v-for="template in RULE_TEMPLATES" :key="template.key" type="button" class="rule-template" @click="applyRuleTemplate(template)">
                         <strong>{{ template.title }}</strong>
                         <p>{{ template.copy }}</p>
                     </button>
@@ -1117,76 +1080,68 @@ const RulesDrawer = {
             <form class="glass-subpanel rules-form" @submit.prevent="submitRuleDraft()">
                 <div class="section-head section-head--compact">
                     <div>
-                        <p class="section-kicker">规则编辑器</p>
-                        <h3>{{ inboxUi.editingRuleId ? '更新规则' : '新建规则' }}</h3>
+                        <p class="section-kicker">Rule Editor</p>
+                        <h3>{{ inboxUi.editingRuleId ? 'Update rule' : 'Create rule' }}</h3>
                     </div>
-                    <button type="button" class="ghost-button" @click="openRulesDrawer()">重置</button>
+                    <button type="button" class="ghost-button" @click="openRulesDrawer()">Reset</button>
                 </div>
 
                 <label class="search-field">
-                    <span>规则名称</span>
-                    <input v-model="inboxUi.ruleDraft.name" type="text" placeholder="例如：账单类邮件自动归档" />
+                    <span>Rule name</span>
+                    <input v-model="inboxUi.ruleDraft.name" type="text" placeholder="Example: Archive billing notifications" />
                 </label>
-
                 <label class="search-field">
-                    <span>作用邮箱</span>
+                    <span>Mailbox scope</span>
                     <select v-model="inboxUi.ruleDraft.mailbox_id">
-                        <option value="">全部邮箱</option>
+                        <option value="">All mailboxes</option>
                         <option v-for="mailbox in state.mailboxes" :key="mailbox.id" :value="String(mailbox.id)">
                             {{ mailbox.name || mailbox.email }}
                         </option>
                     </select>
                 </label>
-
                 <div class="search-panel__grid search-panel__grid--rules">
                     <label class="search-field">
-                        <span>匹配字段</span>
+                        <span>Match field</span>
                         <select v-model="inboxUi.ruleDraft.match_field">
                             <option v-for="field in RULE_FIELD_OPTIONS" :key="field.key" :value="field.key">{{ field.label }}</option>
                         </select>
                     </label>
-
                     <label class="search-field">
-                        <span>匹配方式</span>
+                        <span>Operator</span>
                         <select v-model="inboxUi.ruleDraft.match_operator">
-                            <option value="contains">包含</option>
-                            <option value="equals">完全匹配</option>
-                            <option value="starts_with">开头匹配</option>
-                            <option value="ends_with">结尾匹配</option>
+                            <option value="contains">Contains</option>
+                            <option value="equals">Equals</option>
+                            <option value="starts_with">Starts with</option>
+                            <option value="ends_with">Ends with</option>
                         </select>
                     </label>
                 </div>
-
                 <label class="search-field">
-                    <span>匹配值</span>
-                    <input v-model="inboxUi.ruleDraft.match_value" type="text" placeholder="例如：newsletter@example.com" />
+                    <span>Match value</span>
+                    <input v-model="inboxUi.ruleDraft.match_value" type="text" placeholder="Example: newsletter@example.com" />
                 </label>
-
                 <label class="search-field">
-                    <span>执行动作</span>
+                    <span>Action</span>
                     <select v-model="inboxUi.ruleDraft.action">
                         <option v-for="action in RULE_ACTION_OPTIONS" :key="action.key" :value="action.key">{{ action.label }}</option>
                     </select>
                 </label>
-
                 <label class="rule-toggle">
                     <input v-model="inboxUi.ruleDraft.is_active" type="checkbox" />
-                    <span>保存后立即启用</span>
+                    <span>Enable immediately after saving</span>
                 </label>
-
-                <el-button native-type="submit" type="primary" round :loading="state.rulesSaving">
-                    {{ inboxUi.editingRuleId ? '保存规则' : '创建规则' }}
+                <el-button native-type="submit" type="primary" :loading="state.rulesSaving">
+                    {{ inboxUi.editingRuleId ? 'Save rule' : 'Create rule' }}
                 </el-button>
             </form>
 
             <section class="glass-subpanel rules-list">
                 <div class="section-head section-head--compact">
                     <div>
-                        <p class="section-kicker">已存在规则</p>
-                        <h3>自动策略列表</h3>
+                        <p class="section-kicker">Existing Rules</p>
+                        <h3>Automation list</h3>
                     </div>
                 </div>
-
                 <div v-if="state.rules.length" class="rules-list__grid">
                     <article v-for="rule in state.rules" :key="rule.id" class="rule-card">
                         <div class="rule-card__top">
@@ -1195,7 +1150,7 @@ const RulesDrawer = {
                                 <p>{{ mailboxNameById(rule.mailbox_id) }}</p>
                             </div>
                             <span class="status-pill" :data-tone="rule.is_active ? 'success' : 'muted'">
-                                {{ rule.is_active ? '启用中' : '已停用' }}
+                                {{ rule.is_active ? 'Enabled' : 'Disabled' }}
                             </span>
                         </div>
                         <div class="rule-card__meta">
@@ -1204,21 +1159,20 @@ const RulesDrawer = {
                             <strong>{{ rule.match_value }}</strong>
                         </div>
                         <div class="rule-card__meta">
-                            <span>动作</span>
+                            <span>Action</span>
                             <strong>{{ ruleActionLabel(rule.action) }}</strong>
                         </div>
                         <div class="rule-card__actions">
-                            <button type="button" class="ghost-button" @click="openRulesDrawer(rule)">编辑</button>
-                            <button type="button" class="ghost-button" @click="toggleRuleActive(rule)">{{ rule.is_active ? '停用' : '启用' }}</button>
-                            <button type="button" class="ghost-button ghost-button--danger" @click="deleteRuleEntry(rule)">删除</button>
+                            <button type="button" class="ghost-button" @click="openRulesDrawer(rule)">Edit</button>
+                            <button type="button" class="ghost-button" @click="toggleRuleActive(rule)">{{ rule.is_active ? 'Disable' : 'Enable' }}</button>
+                            <button type="button" class="ghost-button ghost-button--danger" @click="deleteRuleEntry(rule)">Delete</button>
                         </div>
                     </article>
                 </div>
-
                 <div v-else class="empty-panel empty-panel--grid">
-                    <div class="empty-panel__icon">规</div>
-                    <h3>还没有自动规则</h3>
-                    <p>可以从模板开始，也可以把邮件拖到左侧规则入口快速生成草案。</p>
+                    <div class="empty-panel__icon">RL</div>
+                    <h3>No automation rules yet</h3>
+                    <p>Start from a template or drag a message into the rules center to seed a draft.</p>
                 </div>
             </section>
         </div>
@@ -1257,14 +1211,7 @@ export const InboxView = {
             <ReaderSurface :mobile="true" />
         </section>
 
-        <el-drawer
-            v-if="state.isMobile"
-            v-model="state.mobileRailOpen"
-            direction="btt"
-            size="88%"
-            class="utility-drawer utility-drawer--rail"
-            title="文件夹树"
-        >
+        <el-drawer v-if="state.isMobile" v-model="state.mobileRailOpen" direction="btt" size="88%" class="utility-drawer utility-drawer--rail" title="Folders & Accounts">
             <RailColumn />
         </el-drawer>
 
@@ -1275,5 +1222,3 @@ export const InboxView = {
         return useInboxWorkspace();
     },
 };
-
-

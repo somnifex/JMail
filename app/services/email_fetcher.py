@@ -1,6 +1,7 @@
-﻿import email
+import email
 import imaplib
 import json
+import re
 import uuid
 from datetime import datetime
 from email import policy
@@ -12,11 +13,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.models import Mailbox, MailboxStatus
+from app.models.email import Email
 from app.models.schemas import EmailCreate
 from app.services.email_service import EmailService
 from app.services.mail_oauth_service import MailOAuthService
 
 settings = get_settings()
+LIST_PATTERN = re.compile(r'\((?P<flags>[^)]*)\)\s+"(?P<delimiter>[^"]*)"\s+(?P<name>.+)$')
+FETCH_FLAGS_PATTERN = re.compile(r'FLAGS\s+\((?P<flags>[^)]*)\)')
+TRASH_KEYWORDS = ('trash', 'deleted', 'bin', 'recycle')
+ARCHIVE_KEYWORDS = ('archive', 'archiv')
 
 
 class EmailFetcher:
@@ -36,37 +42,59 @@ class EmailFetcher:
         client = None
         try:
             client = await self._open_mailbox(mailbox)
-            client.select('INBOX')
-            status, data = client.uid('search', None, 'ALL')
-            if status != 'OK':
-                raise RuntimeError('Failed to list mailbox messages')
-
-            uid_list = [item for item in (data[0] or b'').split() if item]
-            recent_uids = list(reversed(uid_list[-limit:]))
+            available_folders = self._list_available_folders(client)
+            target_folders = self._resolve_target_folders(mailbox, available_folders)
 
             fetched_count = 0
             new_count = 0
-            for uid in recent_uids:
-                status, msg_data = client.uid('fetch', uid, '(RFC822)')
+            for folder in target_folders:
+                selected = self._select_folder(client, folder['name'])
+                if not selected:
+                    continue
+
+                status, data = client.uid('search', None, 'ALL')
                 if status != 'OK':
                     continue
-                raw_message = b''.join(part[1] for part in msg_data if isinstance(part, tuple) and len(part) > 1 and part[1])
-                if not raw_message:
-                    continue
 
-                parsed_message = email.message_from_bytes(raw_message, policy=policy.default)
-                message_id = parsed_message.get('Message-ID') or f'uid:{uid.decode()}'
-                existing = await self.email_service.get_by_message_id(mailbox.id, message_id)
-                if existing:
-                    continue
+                uid_list = [item for item in (data[0] or b'').split() if item]
+                recent_uids = list(reversed(uid_list[-limit:]))
+                for uid in recent_uids:
+                    status, msg_data = client.uid('fetch', uid, '(RFC822 FLAGS)')
+                    if status != 'OK':
+                        continue
 
-                email_data = await self._parse_email(parsed_message, raw_message, mailbox, uid.decode(), message_id)
-                await self.email_service.create(email_data)
-                fetched_count += 1
-                new_count += 1
+                    raw_message = b''.join(
+                        part[1]
+                        for part in msg_data
+                        if isinstance(part, tuple) and len(part) > 1 and part[1]
+                    )
+                    if not raw_message:
+                        continue
+
+                    parsed_message = email.message_from_bytes(raw_message, policy=policy.default)
+                    message_id = (parsed_message.get('Message-ID') or '').strip() or f'uid:{uid.decode()}'
+                    flags = self._extract_flags(msg_data)
+                    existing = await self.email_service.get_by_message_id(mailbox.id, message_id)
+                    if existing:
+                        if await self._sync_existing_email(existing, folder['kind'], flags):
+                            fetched_count += 1
+                        continue
+
+                    email_data = await self._parse_email(
+                        parsed_message,
+                        raw_message,
+                        mailbox,
+                        uid.decode(),
+                        message_id,
+                        folder['kind'],
+                        flags,
+                    )
+                    await self.email_service.create(email_data)
+                    fetched_count += 1
+                    new_count += 1
 
             await mailbox_service.update_last_fetch(mailbox.id)
-            return {'success': True, 'fetched': fetched_count, 'new': new_count}
+            return {'success': True, 'fetched': fetched_count, 'new': new_count, 'folders': [item['name'] for item in target_folders]}
         except Exception as exc:
             await mailbox_service.update_status(mailbox.id, MailboxStatus.ERROR, str(exc))
             return {'success': False, 'error': str(exc)}
@@ -87,7 +115,43 @@ class EmailFetcher:
             client.login(mailbox.imap_username, mailbox.imap_password)
         return client
 
-    async def _parse_email(self, message: Message, raw_message: bytes, mailbox: Mailbox, uid: str, message_id: str) -> EmailCreate:
+    async def _sync_existing_email(self, existing: Email, folder_kind: str, flags: set[str]) -> bool:
+        is_read = self._is_seen(flags)
+        is_deleted = folder_kind == 'trash'
+        is_archived = folder_kind == 'archive'
+
+        changed = False
+        if existing.is_read != is_read:
+            existing.is_read = is_read
+            changed = True
+        if existing.is_deleted != is_deleted:
+            existing.is_deleted = is_deleted
+            changed = True
+        if existing.is_archived != is_archived:
+            existing.is_archived = is_archived
+            changed = True
+        if existing.is_deleted and existing.is_archived:
+            existing.is_archived = False
+            changed = True
+        if existing.is_archived and existing.is_deleted:
+            existing.is_deleted = False
+            changed = True
+
+        if changed:
+            await self.db.commit()
+            await self.db.refresh(existing)
+        return changed
+
+    async def _parse_email(
+        self,
+        message: Message,
+        raw_message: bytes,
+        mailbox: Mailbox,
+        uid: str,
+        message_id: str,
+        folder_kind: str,
+        flags: set[str],
+    ) -> EmailCreate:
         to_list = self._parse_addresses(message.get_all('to', []))
         cc_list = self._parse_addresses(message.get_all('cc', []))
         reply_to_list = self._parse_addresses(message.get_all('reply-to', []))
@@ -166,7 +230,120 @@ class EmailFetcher:
             has_attachments=bool(attachments),
             sent_at=sent_at,
             storage_path=storage_path,
+            is_read=self._is_seen(flags),
+            is_deleted=folder_kind == 'trash',
+            is_archived=folder_kind == 'archive',
         )
+
+    def _list_available_folders(self, client) -> list[dict]:
+        status, data = client.list()
+        if status != 'OK':
+            return []
+
+        folders: list[dict] = []
+        for raw_item in data or []:
+            if not raw_item:
+                continue
+            line = raw_item.decode('utf-8', errors='ignore') if isinstance(raw_item, bytes) else str(raw_item)
+            match = LIST_PATTERN.search(line)
+            if not match:
+                continue
+            raw_name = match.group('name').strip()
+            if raw_name.startswith('"') and raw_name.endswith('"'):
+                raw_name = raw_name[1:-1].replace('\\"', '"')
+            flags = {item.strip().lower() for item in match.group('flags').split() if item.strip()}
+            folders.append({
+                'name': raw_name,
+                'normalized': raw_name.casefold(),
+                'flags': flags,
+                'kind': self._folder_kind(raw_name, flags),
+            })
+        return folders
+
+    def _resolve_target_folders(self, mailbox: Mailbox, available_folders: list[dict]) -> list[dict]:
+        configured = mailbox.fetch_folder_list
+        resolved: list[dict] = []
+        seen: set[str] = set()
+
+        for target in configured:
+            folder = self._match_folder(target, available_folders)
+            if folder is None:
+                folder = {'name': target, 'normalized': target.casefold(), 'flags': set(), 'kind': self._target_kind(target)}
+            if folder['normalized'] in seen:
+                continue
+            seen.add(folder['normalized'])
+            resolved.append(folder)
+
+        if not resolved:
+            return [{'name': 'INBOX', 'normalized': 'inbox', 'flags': {'\\inbox'}, 'kind': 'inbox'}]
+        return resolved
+
+    def _match_folder(self, target: str, available_folders: list[dict]) -> dict | None:
+        normalized_target = target.strip().casefold()
+        if not normalized_target:
+            return None
+
+        for folder in available_folders:
+            if folder['normalized'] == normalized_target:
+                return folder
+
+        target_kind = self._target_kind(target)
+        if target_kind in {'trash', 'archive'}:
+            for folder in available_folders:
+                if folder['kind'] == target_kind:
+                    return folder
+
+        if normalized_target == 'inbox':
+            for folder in available_folders:
+                if folder['kind'] == 'inbox':
+                    return folder
+        return None
+
+    def _target_kind(self, target: str) -> str:
+        normalized = target.strip().casefold()
+        if normalized == 'inbox':
+            return 'inbox'
+        if any(keyword in normalized for keyword in TRASH_KEYWORDS) or '垃圾' in target or '废纸篓' in target:
+            return 'trash'
+        if any(keyword in normalized for keyword in ARCHIVE_KEYWORDS):
+            return 'archive'
+        return 'other'
+
+    def _folder_kind(self, folder_name: str, flags: set[str]) -> str:
+        lowered_name = folder_name.casefold()
+        if '\\trash' in flags or any(keyword in lowered_name for keyword in TRASH_KEYWORDS) or '垃圾' in folder_name or '废纸篓' in folder_name:
+            return 'trash'
+        if '\\archive' in flags or any(keyword in lowered_name for keyword in ARCHIVE_KEYWORDS):
+            return 'archive'
+        if '\\inbox' in flags or lowered_name == 'inbox':
+            return 'inbox'
+        return 'other'
+
+    def _select_folder(self, client, folder_name: str) -> bool:
+        target = folder_name
+        if any(char in folder_name for char in (' ', '&')) and not folder_name.startswith('"'):
+            escaped = folder_name.replace('\\', '\\\\').replace('"', '\\"')
+            target = f'"{escaped}"'
+        status, _ = client.select(target)
+        return status == 'OK'
+
+    @staticmethod
+    def _extract_flags(msg_data) -> set[str]:
+        flags: set[str] = set()
+        for part in msg_data or []:
+            if not isinstance(part, tuple) or not part or not part[0]:
+                continue
+            header = part[0].decode('utf-8', errors='ignore') if isinstance(part[0], bytes) else str(part[0])
+            match = FETCH_FLAGS_PATTERN.search(header)
+            if not match:
+                continue
+            flags.update(item.strip() for item in match.group('flags').split() if item.strip())
+        return flags
+
+    @staticmethod
+    def _is_seen(flags: set[str]) -> bool:
+        lowered = {item.lower() for item in flags}
+        return '\\seen' in lowered
 
     @staticmethod
     def _parse_addresses(values) -> list[dict]:

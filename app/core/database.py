@@ -1,4 +1,4 @@
-﻿import os
+import os
 
 from sqlalchemy import inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -43,7 +43,7 @@ async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(_ensure_user_columns)
-        await conn.run_sync(_ensure_mailbox_oauth_columns)
+        await conn.run_sync(_ensure_mailbox_columns)
         await conn.run_sync(_ensure_email_columns)
 
     async with AsyncSessionLocal() as session:
@@ -105,7 +105,7 @@ def _ensure_user_columns(sync_conn) -> None:
     )
 
 
-def _ensure_mailbox_oauth_columns(sync_conn) -> None:
+def _ensure_mailbox_columns(sync_conn) -> None:
     _ensure_table_columns(
         sync_conn,
         'mailboxes',
@@ -117,6 +117,7 @@ def _ensure_mailbox_oauth_columns(sync_conn) -> None:
             'oauth_token_type': 'VARCHAR(50)',
             'oauth_scope': 'TEXT',
             'oauth_token_expires_at': 'DATETIME',
+            'fetch_folders': 'TEXT',
         },
     )
 

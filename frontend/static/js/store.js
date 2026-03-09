@@ -13,6 +13,7 @@ import {
     UI_PREFS_KEY,
     VIEW_META,
 } from './constants.js';
+import { LOCALE_OPTIONS, readStoredLocale, translate, writeStoredLocale } from './i18n.js';
 import {
     buildEmailDocument,
     EMAIL_SCOPE_ALL as EMAIL_SCOPE_ALL_ALIAS,
@@ -175,6 +176,7 @@ function createStore() {
         booting: true,
         token: readStoredToken(),
         user: null,
+        locale: readStoredLocale(),
         currentView: uiPrefs.currentView || 'overview',
         authMode: 'login',
         authForms: defaultAuthForms(),
@@ -259,23 +261,29 @@ function createStore() {
                 state.user = null;
                 state.booting = false;
                 state.authMode = 'login';
-                ElMessage.error('登录状态已失效，请重新登录。');
+                ElMessage.error('Session expired. Please sign in again.');
             }
             throw error;
         }
     };
 
+    const t = (key, params = {}) => translate(state.locale, key, params);
+    const setLocale = (locale) => {
+        state.locale = locale === 'en-US' ? 'en-US' : 'zh-CN';
+        writeStoredLocale(state.locale);
+        updateDocumentTitle();
+    };
     const isAdmin = computed(() => state.user?.role === 'admin');
     const currentViewMeta = computed(() => VIEW_META[state.currentView] || VIEW_META.inbox);
-    const userDisplayName = computed(() => state.user?.full_name || state.user?.username || '用户');
+    const userDisplayName = computed(() => state.user?.full_name || state.user?.username || 'User');
     const userInitial = computed(() => String(userDisplayName.value || 'U').trim().charAt(0).toUpperCase() || 'U');
     const currentScopeMailbox = computed(() => state.emailScope === EMAIL_SCOPE_ALL
         ? null
         : state.mailboxes.find((item) => item.id === Number(state.emailScope)) || null);
-    const currentScopeLabel = computed(() => currentScopeMailbox.value ? (currentScopeMailbox.value.name || currentScopeMailbox.value.email) : '统一收件箱');
+    const currentScopeLabel = computed(() => currentScopeMailbox.value ? (currentScopeMailbox.value.name || currentScopeMailbox.value.email) : t('All Mailboxes'));
     const currentScopeDescription = computed(() => currentScopeMailbox.value
-        ? `${currentScopeMailbox.value.email} 的独立邮件视图，更适合精确处理单个邮箱。`
-        : '把全部邮箱邮件流放进同一条处理链中，先看整体，再切到局部。');
+        ? t('{email} sync, message volume and handling status are shown together for focused work.', { email: currentScopeMailbox.value.email })
+        : t('Review mail flow, alerts and processing status across all connected mailboxes.'));
     const activeProvider = computed(() => state.providerCatalog.find((item) => item.id === state.mailboxForm.provider_template) || state.detectedProvider || null);
     const emailAttachments = computed(() => safeJsonParse(state.emailDetail?.attachments, []));
     const aggregateStats = computed(() => state.mailboxes.reduce((summary, mailbox) => {
@@ -319,10 +327,10 @@ function createStore() {
     });
     const activeRuleCount = computed(() => state.rules.filter((item) => item.is_active).length);
     const heroStats = computed(() => [
-        { label: '未读压力', value: currentScopeStats.value.unread || 0, hint: '优先处理' },
-        { label: '已归档', value: currentScopeStats.value.archived || 0, hint: '沉淀邮件' },
-        { label: '活跃规则', value: activeRuleCount.value || 0, hint: '自动策略' },
-        { label: '同步异常', value: aggregateStats.value.errors || 0, hint: '需要修复' },
+        { label: 'Unread', value: currentScopeStats.value.unread || 0, hint: 'Needs action' },
+        { label: 'Archived', value: currentScopeStats.value.archived || 0, hint: 'Stored history' },
+        { label: 'Rules', value: activeRuleCount.value || 0, hint: 'Automation' },
+        { label: 'Alerts', value: aggregateStats.value.errors || 0, hint: 'Needs review' },
     ]);
     const emailGroups = computed(() => groupEmailsByDate(state.emails));
     const selectedEmails = computed(() => state.emails.filter((item) => state.selectedEmailIds.includes(item.id)));
@@ -349,18 +357,18 @@ function createStore() {
 
     const updateDocumentTitle = () => {
         const authTitleMap = {
-            login: '欢迎回来',
-            register: '创建账户',
-            reset: '重置密码',
+            login: 'Sign in',
+            register: 'Create account',
+            reset: 'Reset password',
         };
         const title = state.user
-            ? (state.currentView === 'inbox' ? currentScopeLabel.value : currentViewMeta.value.title)
-            : authTitleMap[state.authMode] || '欢迎';
+            ? (state.currentView === 'inbox' ? currentScopeLabel.value : t(currentViewMeta.value.title))
+            : t(authTitleMap[state.authMode] || 'Welcome');
         document.title = `JMail | ${title}`;
     };
 
-    const showError = (error, fallback = '操作失败') => {
-        ElMessage.error(error?.message || fallback);
+    const showError = (error, fallback = 'Operation failed') => {
+        ElMessage.error('Session expired. Please sign in again.');
     };
 
     const showSuccess = (message) => {
@@ -427,9 +435,9 @@ function createStore() {
         if (key === 'deleted') return Number(stats.deleted || 0);
         return Number(stats.total || state.emailTotal || 0);
     };
-    const currentMailboxLabelForEmail = (email) => email?.mailbox_name || email?.mailbox_email || '未知邮箱';
+    const currentMailboxLabelForEmail = (email) => email?.mailbox_name || email?.mailbox_email || 'Unknown mailbox';
     const buildEmailIframeDocument = (html) => buildEmailDocument(html);
-    const describeLastFetch = (mailbox) => mailbox?.last_fetch ? formatRelativeTime(mailbox.last_fetch, '未同步') : '未同步';
+    const describeLastFetch = (mailbox) => mailbox?.last_fetch ? formatRelativeTime(mailbox.last_fetch, 'Not synced') : 'Not synced';
 
     const mergeEmailIntoList = (emailPatch) => {
         state.emails = state.emails.map((item) => item.id === emailPatch.id ? { ...item, ...emailPatch } : item);
@@ -525,7 +533,7 @@ function createStore() {
             state.rules = Array.isArray(rules) ? rules : [];
             return state.rules;
         } catch (error) {
-            showError(error, '加载规则失败');
+            showError(error, 'Operation failed');
             return [];
         } finally {
             state.rulesLoading = false;
@@ -547,7 +555,7 @@ function createStore() {
         } catch (error) {
             state.emailConversation = [];
             state.emailConversationKey = '';
-            showError(error, '加载会话失败');
+            showError(error, 'Operation failed');
             return [];
         } finally {
             state.conversationLoading = false;
@@ -656,7 +664,7 @@ function createStore() {
                 state.mobileReaderOpen = false;
             }
         } catch (error) {
-            showError(error, '加载邮件失败');
+            showError(error, 'Operation failed');
         } finally {
             state.inboxLoading = false;
         }
@@ -719,9 +727,9 @@ function createStore() {
             if (state.currentView === 'users' || state.currentView === 'admin') {
                 await ensureAdminWorkspace(true);
             }
-            showSuccess('当前视图已刷新。');
+            showSuccess('Completed.');
         } catch (error) {
-            showError(error, '刷新失败');
+            showError(error, 'Operation failed');
         } finally {
             state.refreshing = false;
         }
@@ -739,9 +747,9 @@ function createStore() {
             writeStoredToken(payload.access_token);
             syncProfileForms();
             await bootstrapWorkspace(true);
-            showSuccess('登录成功。');
+            showSuccess('Completed.');
         } catch (error) {
-            showError(error, '登录失败');
+            showError(error, 'Operation failed');
         } finally {
             state.authSubmitting = false;
             state.booting = false;
@@ -750,11 +758,11 @@ function createStore() {
 
     const submitRegister = async () => {
         if (!state.authForms.register.username.trim() || !state.authForms.register.email.trim()) {
-            ElMessage.warning('请完整填写用户名和邮箱。');
+            ElMessage.warning('Please review the required fields.');
             return;
         }
         if (state.authForms.register.password !== state.authForms.register.confirm_password) {
-            ElMessage.warning('两次密码不一致。');
+            ElMessage.warning('Please review the required fields.');
             return;
         }
         state.authSubmitting = true;
@@ -773,9 +781,9 @@ function createStore() {
             writeStoredToken(payload.access_token);
             syncProfileForms();
             await bootstrapWorkspace(true);
-            showSuccess('注册成功。');
+            showSuccess('Completed.');
         } catch (error) {
-            showError(error, '注册失败');
+            showError(error, 'Operation failed');
         } finally {
             state.authSubmitting = false;
             state.booting = false;
@@ -795,9 +803,9 @@ function createStore() {
             });
             state.authMode = 'login';
             state.authForms.reset = defaultAuthForms().reset;
-            showSuccess('密码已更新，请重新登录。');
+            showSuccess('Completed.');
         } catch (error) {
-            showError(error, '重置失败');
+            showError(error, 'Operation failed');
         } finally {
             state.authSubmitting = false;
         }
@@ -824,7 +832,7 @@ function createStore() {
         state.mobileDebugOpen = false;
         state.authForms = defaultAuthForms();
         state.authMode = 'login';
-        showSuccess('已退出登录。');
+        showSuccess('Completed.');
     };
 
     const openFolder = async ({ scope = state.emailScope, status = state.emailStatus } = {}) => {
@@ -876,7 +884,7 @@ function createStore() {
         try {
             await loadEmailDetail(email.id, { openReader, refreshStats: true });
         } catch (error) {
-            showError(error, '加载邮件详情失败');
+            showError(error, 'Operation failed');
         }
     };
 
@@ -944,9 +952,9 @@ function createStore() {
             await loadMailboxStats(email.mailbox_id, true);
             await loadSystemStats(true);
             await reloadEmails({ preserveSelection: true, selectFirst: true, forceStats: true });
-            showSuccess(shouldRead ? '已标记为已读。' : '已标记为未读。');
+            showSuccess('Completed.');
         } catch (error) {
-            showError(error, '更新阅读状态失败');
+            showError(error, 'Operation failed');
         }
     };
 
@@ -955,9 +963,9 @@ function createStore() {
             await request(`/emails/${email.id}/star`, { method: 'POST' });
             await loadMailboxStats(email.mailbox_id, true);
             await reloadEmails({ preserveSelection: true, selectFirst: true, forceStats: true });
-            showSuccess(email.is_flagged ? '已取消星标。' : '已设为星标。');
+            showSuccess('Completed.');
         } catch (error) {
-            showError(error, '更新星标失败');
+            showError(error, 'Operation failed');
         }
     };
 
@@ -968,9 +976,9 @@ function createStore() {
             await loadSystemStats(true);
             clearEmailSelection();
             await reloadEmails({ preserveSelection: false, selectFirst: true, forceStats: true });
-            showSuccess('邮件已归档。');
+            showSuccess('Completed.');
         } catch (error) {
-            showError(error, '归档失败');
+            showError(error, 'Operation failed');
         }
     };
 
@@ -987,9 +995,9 @@ function createStore() {
             await loadAllMailboxStats(true);
             await loadSystemStats(true);
             await reloadEmails({ preserveSelection: false, selectFirst: true, forceStats: true });
-            showSuccess('已批量归档邮件。');
+            showSuccess('Completed.');
         } catch (error) {
-            showError(error, '批量归档失败');
+            showError(error, 'Operation failed');
         }
     };
 
@@ -1000,15 +1008,15 @@ function createStore() {
             await loadSystemStats(true);
             clearEmailSelection();
             await reloadEmails({ preserveSelection: false, selectFirst: true, forceStats: true });
-            showSuccess('邮件已移回收件箱。');
+            showSuccess('Completed.');
         } catch (error) {
-            showError(error, '移回收件箱失败');
+            showError(error, 'Operation failed');
         }
     };
 
     const ensureSelectedEmails = () => {
         if (!selectedEmails.value.length) {
-            ElMessage.warning('请先选择邮件。');
+            ElMessage.warning('Please review the required fields.');
             return null;
         }
         return selectedEmails.value;
@@ -1027,24 +1035,24 @@ function createStore() {
             await loadAllMailboxStats(true);
             await loadSystemStats(true);
             await reloadEmails({ preserveSelection: false, selectFirst: true, forceStats: true });
-            showSuccess(markRead ? '已批量标记为已读。' : '已批量标记为未读。');
+            showSuccess('Completed.');
         } catch (error) {
-            showError(error, '批量更新阅读状态失败');
+            showError(error, 'Operation failed');
         }
     };
 
     const deleteEmail = async (email) => {
         try {
-            await ElMessageBox.confirm(`确认删除「${email.subject || '(无主题)'}」？`, '删除邮件', { type: 'warning' });
+            await ElMessageBox.confirm('Please confirm this action.', 'Confirm', { type: 'warning' });
             await request(`/emails/${email.id}`, { method: 'DELETE' });
             await loadMailboxStats(email.mailbox_id, true);
             await loadSystemStats(true);
             clearEmailSelection();
             await reloadEmails({ preserveSelection: false, selectFirst: true, forceStats: true });
-            showSuccess('邮件已删除。');
+            showSuccess('Completed.');
         } catch (error) {
             if (error !== 'cancel') {
-                showError(error, '删除失败');
+                showError(error, 'Operation failed');
             }
         }
     };
@@ -1055,7 +1063,7 @@ function createStore() {
             return;
         }
         try {
-            await ElMessageBox.confirm(`确认删除已选择的 ${emails.length} 封邮件？`, '批量删除', { type: 'warning' });
+            await ElMessageBox.confirm('Please confirm this action.', 'Confirm', { type: 'warning' });
             for (const email of emails) {
                 await request(`/emails/${email.id}`, { method: 'DELETE' });
             }
@@ -1063,10 +1071,10 @@ function createStore() {
             await loadAllMailboxStats(true);
             await loadSystemStats(true);
             await reloadEmails({ preserveSelection: false, selectFirst: true, forceStats: true });
-            showSuccess('已批量删除邮件。');
+            showSuccess('Completed.');
         } catch (error) {
             if (error !== 'cancel') {
-                showError(error, '批量删除失败');
+                showError(error, 'Operation failed');
             }
         }
     };
@@ -1083,9 +1091,9 @@ function createStore() {
             await loadSystemStats(true);
             clearEmailSelection();
             await reloadEmails({ preserveSelection: false, selectFirst: true, forceStats: true });
-            showSuccess('邮件已恢复。');
+            showSuccess('Completed.');
         } catch (error) {
-            showError(error, '恢复失败');
+            showError(error, 'Operation failed');
         }
     };
 
@@ -1107,24 +1115,24 @@ function createStore() {
             await loadAllMailboxStats(true);
             await loadSystemStats(true);
             await reloadEmails({ preserveSelection: false, selectFirst: true, forceStats: true });
-            showSuccess('已批量恢复邮件。');
+            showSuccess('Completed.');
         } catch (error) {
-            showError(error, '批量恢复失败');
+            showError(error, 'Operation failed');
         }
     };
 
     const purgeEmail = async (email) => {
         try {
-            await ElMessageBox.confirm(`确认彻底删除「${email.subject || '(无主题)'}」？此操作不可恢复。`, '彻底删除', { type: 'warning' });
+            await ElMessageBox.confirm('Please confirm this action.', 'Confirm', { type: 'warning' });
             await request(`/emails/${email.id}?permanent=true`, { method: 'DELETE' });
             await loadMailboxStats(email.mailbox_id, true);
             await loadSystemStats(true);
             clearEmailSelection();
             await reloadEmails({ preserveSelection: false, selectFirst: true, forceStats: true });
-            showSuccess('邮件已彻底删除。');
+            showSuccess('Completed.');
         } catch (error) {
             if (error !== 'cancel') {
-                showError(error, '彻底删除失败');
+                showError(error, 'Operation failed');
             }
         }
     };
@@ -1135,7 +1143,7 @@ function createStore() {
             return;
         }
         try {
-            await ElMessageBox.confirm(`确认彻底删除已选择的 ${emails.length} 封邮件？此操作不可恢复。`, '彻底删除', { type: 'warning' });
+            await ElMessageBox.confirm('Please confirm this action.', 'Confirm', { type: 'warning' });
             for (const email of emails) {
                 await request(`/emails/${email.id}?permanent=true`, { method: 'DELETE' });
             }
@@ -1143,10 +1151,10 @@ function createStore() {
             await loadAllMailboxStats(true);
             await loadSystemStats(true);
             await reloadEmails({ preserveSelection: false, selectFirst: true, forceStats: true });
-            showSuccess('已批量彻底删除邮件。');
+            showSuccess('Completed.');
         } catch (error) {
             if (error !== 'cancel') {
-                showError(error, '批量彻底删除失败');
+                showError(error, 'Operation failed');
             }
         }
     };
@@ -1166,9 +1174,9 @@ function createStore() {
                 });
             }
             await loadRules(true);
-            showSuccess(ruleId ? '规则已更新。' : '规则已创建。');
+            showSuccess('Completed.');
         } catch (error) {
-            showError(error, ruleId ? '更新规则失败' : '创建规则失败');
+            showError(error, 'Operation failed');
             throw error;
         } finally {
             state.rulesSaving = false;
@@ -1177,13 +1185,13 @@ function createStore() {
 
     const deleteRuleEntry = async (rule) => {
         try {
-            await ElMessageBox.confirm(`确认删除规则「${rule.name}」？`, '删除规则', { type: 'warning' });
+            await ElMessageBox.confirm('Please confirm this action.', 'Confirm', { type: 'warning' });
             await request(`/rules/${rule.id}`, { method: 'DELETE' });
             await loadRules(true);
-            showSuccess('规则已删除。');
+            showSuccess('Completed.');
         } catch (error) {
             if (error !== 'cancel') {
-                showError(error, '删除规则失败');
+                showError(error, 'Operation failed');
                 throw error;
             }
         }
@@ -1192,7 +1200,7 @@ function createStore() {
     const moveEmailsToFolder = async (emailIds, targetStatus) => {
         const ids = Array.from(new Set((emailIds || []).map((item) => Number(item)).filter(Boolean)));
         if (!ids.length) {
-            ElMessage.warning('请先拖动或选择邮件。');
+            ElMessage.warning('Please review the required fields.');
             return;
         }
         const resolveEmail = (id) => state.emails.find((item) => item.id === id)
@@ -1221,9 +1229,9 @@ function createStore() {
             await loadAllMailboxStats(true);
             await loadSystemStats(true);
             await reloadEmails({ preserveSelection: false, selectFirst: true, forceStats: true });
-            showSuccess(targetStatus === 'archived' ? '邮件已拖入归档。' : (targetStatus === 'deleted' ? '邮件已拖入已删除。' : '邮件已移回收件箱。'));
+            showSuccess('Completed.');
         } catch (error) {
-            showError(error, '拖拽处理失败');
+            showError(error, 'Operation failed');
         }
     };
 
@@ -1244,14 +1252,14 @@ function createStore() {
 
     const replyToEmail = (email) => {
         const target = email.reply_to || email.from_address;
-        const replySubject = email.subject?.toLowerCase().startsWith('re:') ? email.subject : `Re: ${email.subject || '(无主题)'}`;
+        const replySubject = email.subject?.toLowerCase().startsWith('re:') ? email.subject : `Re: ${email.subject || '(闂傚倸鍊搁崐鎼佸磹閹间礁纾归柟闂寸绾惧綊鏌熼梻瀵割槮缁惧墽鎳撻—鍐偓锝庝簼閹癸綁鏌ｉ鐐搭棞闁靛棙甯掗～婵嬫晲閸涱剙顥氬┑掳鍊楁慨鐑藉磻閻愮儤鍋嬮柣妯荤湽閳ь兛绶氬鎾閳╁啯鐝栭梻渚€鈧偛鑻晶鎾煙椤斿吋鍋ユい銏″哺閸┾偓妞ゆ帒瀚拑鐔兼煥濠靛棙鍟掗柡鍐ㄧ墕閻掑灚銇勯幒鎴濐仾闁稿顑呴埞鎴︽偐閸欏鎮欓梺娲诲幗椤ㄥ﹪鎮￠锕€鐐婇柕濠忓閿涙洟姊虹粙娆惧剱闁规悂绠栭獮澶愬箻椤旇偐顦板銈嗗笒閸嬪棗危椤掍胶绡€闁汇垽娼ф禒鈺呮倶韫囨梻鎳勭紒缁樼洴閸┾偓妞ゆ帒鍊甸崑鎾舵喆閸曨剛顦ㄩ梺鎼炲妼濞硷繝鎮伴鍢夌喖鎳栭埡鍐跨床婵犳鍠楅〃鍛涘▎鎾嶅宕奸悢铏圭槇闂佹眹鍨藉褎绂掗敃鍌涚厱闁靛鍎抽崺锝夋煙椤旀儳鍘撮柡浣稿暣瀹曟帒顫濇鏍ф暩闂傚倸鍊风欢锟犲礈濞嗘垹鐭撻柣銏㈩焾閻?'}`;
         const quote = [
             '',
             '',
-            '--- 原始邮件 ---',
-            `发件人: ${formatSenderLine(email.from_name, email.from_address)}`,
-            `发送时间: ${formatDateTime(email.sent_at || email.received_at)}`,
-            `主题: ${email.subject || '(无主题)'}`,
+            '--- 闂傚倸鍊搁崐鎼佸磹閹间礁纾归柟闂寸绾惧綊鏌熼梻瀵割槮缁惧墽鎳撻—鍐偓锝庝簼閹癸綁鏌ｉ鐐搭棞闁靛棙甯掗～婵嬫晲閸涱剙顥氬┑掳鍊楁慨鐑藉磻濞戔懞鍥偨缁嬫寧鐎梺鐟板⒔缁垶宕戦幇顓滀簻闁归偊鍠栭弸搴∶瑰鍫㈢暫闁哄被鍔戝鎾倷濞村浜鹃柟闂寸劍閸婂嘲鈹戦悩鎻掓殧濞存粍绮撻弻鐔煎传閸曨剦妫炴繛瀛樼矊婢х晫妲愰幘瀛樺闁荤喐婢橀～宥咁渻閵堝啫濡奸柨鏇ㄤ邯閹即顢氶埀顒€顕ｆ禒瀣垫晣闁绘劖顔栭崯鍥ㄤ繆閻愵亜鈧牠骞愰悙顒佸弿閻庨潧鎲￠弳婊堟煏婵炑冩噽閿涙繈姊虹粙鎸庢拱婵ǜ鍔嶉悧搴ㄦ⒒娴ｈ櫣甯涙い銊ョ墛缁绘盯鍩€椤掑倵鍋撳▓鍨灈妞ゎ厾鍏橀獮鍐閵堝棗浜楅柟鑹版彧缂嶅棝宕ョ€ｎ偂绻嗛柣鎰典簻閳ь剚鐗曢～蹇旂節濮橆剛鍘遍梺鍓插亖閸庡崬效閸欏浜滈柟鎯у船閻忣亪鏌嶉柨瀣仼缂佽鲸鎸婚幏鍛叏閹搭厺绨界紒顕呭弮閸┾剝鎷呴崣澶嬫澑婵＄偑鍊栭弻銊╁箹椤愶箑鐒垫い鎺嶈兌缁犳牕菐閸パ嶈含闁诡喚鏅划娆戞崉椤垶效濠碉紕鍋戦崐鏍偋濡も偓椤繈濡搁埡鍌氬壍闂佸憡娲﹂崹閬嶅煕閹寸姷纾奸悗锝庡亜椤曟粍绻濋埀顒勫箥椤斿墽锛滃銈嗘閸嬫劙鎮樻潏鈺冪＜妞ゆ洖鎳庡顕€鏌涢妸鈺冪暫妤犵偛娲﹂幏鍛存偡閹殿喗袙?---',
+            `闂傚倸鍊搁崐鎼佸磹閹间礁纾归柟闂寸绾惧綊鏌熼梻瀵割槮缁惧墽鎳撻—鍐偓锝庝簼閹癸綁鏌ｉ鐐搭棞闁靛棙甯掗～婵嬫晲閸涱剙顥氬┑掳鍊楁慨鐑藉磻濞戔懞鍥偨缁嬫寧鐎梺鐟板⒔缁垶宕戦幇鐗堢厱闁归偊鍨扮槐锕傛煟閵忕媭鐓兼慨濠勭帛閹峰懘鎮烽柇锕€娈濇繝鐢靛仜瀵爼鎮ч悩鑼殾闁圭増婢樼粻鐟懊归敐鍥剁劸闁诲寒鍙冨铏圭矙鐠恒劎浼囬梺绋款儑閸嬨倝骞冮敓鐘插嵆闁靛骏绱曢崢鐢告⒒娓氬洤寮跨紒鐘冲灴閻涱喖顫滈埀顒勫蓟閺囥垹閱囬柣鏃傤焾閸炲姊洪崫鍕効缂佽鲸娲熼崺鈧い鎺戯功缁夐潧霉濠婂簼閭€规洩缍佸畷鐔碱敍濞戞艾骞愰梺璇茬箳閸嬬喖宕戦幘鍓佺焼濠㈣泛鐬肩壕濂告煟濡櫣锛嶆繛鍙夋綑閳规垿鏁嶉崟顒傚姽濡炪倧闄勯幐鎶藉蓟閵娿儮妲堟慨姗嗗墯閻庤顪? ${formatSenderLine(email.from_name, email.from_address)}`,
+            `闂傚倸鍊搁崐鎼佸磹閹间礁纾归柟闂寸绾惧綊鏌熼梻瀵割槮缁惧墽鎳撻—鍐偓锝庝簼閹癸綁鏌ｉ鐐搭棞闁靛棙甯掗～婵嬫晲閸涱剙顥氬┑掳鍊楁慨鐑藉磻濞戔懞鍥偨缁嬫寧鐎梺鐟板⒔缁垶宕戦幇鐗堢厱闁归偊鍨扮槐锕傛煟閵忕媭鐓兼慨濠勭帛閹峰懘鎮烽柇锕€娈濇繝鐢靛仜瀵爼鎮ч悩鑼殾闁圭増婢樼粻鐟懊归敐鍥剁劸闁诲寒鍙冨铏圭矙鐠恒劎浼囬梺绋款儑閸嬨倝骞冮敓鐘插嵆闁绘ê鍟块弸鎴︽煙閸忚偐鏆橀柛鏂匡躬閸┾偓妞ゆ巻鍋撻柛鐔告綑閻ｇ兘濡歌閸嬫挸鈽夊▍顓т邯閸┾偓妞ゆ巻鍋撴繛纭风節瀵鈽夐埗鈹惧亾閿曞倸绠ｆ繝闈涙噽閹稿鈹戦悙鑼憼缂侇喖绉堕崚鎺楀箻鐠囪尪鎽曢梺缁樻煥閹诧紕绱為崶顒佺厱闁圭偓顨呴幆娆撳箣閻樼數锛滅紓鍌欓檷閸ㄥ綊鐛弽顓熺厽闁哄诞浣镐划閻庢鍠涢褔鍩ユ径鎰潊闁绘ɑ鍓氬Λ鐔兼⒑閼姐倕校濞存粈绮欏畷婊堟焼瀹ュ棙娅滈梺鍛婅壘閸熷潡鏌婇敐鍛殾闁诡垶鍋婂顏堟⒒婵犲骸澧婚柛鎾跺枛瀵鎮㈢喊杈ㄦ櫓闂佷紮绲介張顒勫闯閺夎鏃堟偐闂堟稐娌梺鍦嚀濞差參鎮伴鈧獮鎺懳旈埀顒勭嵁閵忊€茬箚闁绘劖娼欓崝銈嗐亜閵夛箑鍝烘慨濠勭帛閹峰懐绮欏▎鐐棏闂備胶绮幐鎼佹偋閹惧磭鏆﹂柟鍓佺摂閺佸﹦鐥幏灞煎惈闁? ${formatDateTime(email.sent_at || email.received_at)}`,
+            `婵犵數濮烽弫鍛婃叏閻戣棄鏋侀柛娑橈攻閸欏繘鏌ｉ幋锝嗩棄闁哄绶氶弻鐔兼⒒鐎靛壊妲紒鐐劤椤兘寮婚敐澶婄疀妞ゆ帊鐒﹂崕鎾绘⒑閹肩偛濡奸柛濠傛健瀵鈽夐姀鈺傛櫇闂佹寧绻傚Λ娑⑺囬妷褏纾藉ù锝呮惈灏忛梺鍛婎殕婵炲﹤顕ｆ繝姘亜闁稿繐鐨烽幏鑽ょ磼閻愵剙鍔ゆい鎴炲姍瀹曨剝銇愰幒鎾嫼闂備緡鍋嗛崑娑㈡嚐椤栨稒娅犻柛鎾楀懐锛滈梺缁橆焾濞呮洖鐣风仦缁㈡闁绘劖褰冮弳娆愩亜椤撴粌濮傜€规洜鍠栭、妤呭焵椤掆偓椤曪綁宕稿Δ浣叉嫼缂佺虎鍘奸幊搴ㄦ倿娴犲鐓曢柡鍌涘濠€鎵磼? ${email.subject || '(闂傚倸鍊搁崐鎼佸磹閹间礁纾归柟闂寸绾惧綊鏌熼梻瀵割槮缁惧墽鎳撻—鍐偓锝庝簼閹癸綁鏌ｉ鐐搭棞闁靛棙甯掗～婵嬫晲閸涱剙顥氬┑掳鍊楁慨鐑藉磻閻愮儤鍋嬮柣妯荤湽閳ь兛绶氬鎾閳╁啯鐝栭梻渚€鈧偛鑻晶鎾煙椤斿吋鍋ユい銏″哺閸┾偓妞ゆ帒瀚拑鐔兼煥濠靛棙鍟掗柡鍐ㄧ墕閻掑灚銇勯幒鎴濐仾闁稿顑呴埞鎴︽偐閸欏鎮欓梺娲诲幗椤ㄥ﹪鎮￠锕€鐐婇柕濠忓閿涙洟姊虹粙娆惧剱闁规悂绠栭獮澶愬箻椤旇偐顦板銈嗗笒閸嬪棗危椤掍胶绡€闁汇垽娼ф禒鈺呮倶韫囨梻鎳勭紒缁樼洴閸┾偓妞ゆ帒鍊甸崑鎾舵喆閸曨剛顦ㄩ梺鎼炲妼濞硷繝鎮伴鍢夌喖鎳栭埡鍐跨床婵犳鍠楅〃鍛涘▎鎾嶅宕奸悢铏圭槇闂佹眹鍨藉褎绂掗敃鍌涚厱闁靛鍎抽崺锝夋煙椤旀儳鍘撮柡浣稿暣瀹曟帒顫濇鏍ф暩闂傚倸鍊风欢锟犲礈濞嗘垹鐭撻柣銏㈩焾閻?'}`,
             '',
             email.text_content || '',
         ].join('\n');
@@ -1286,7 +1294,7 @@ function createStore() {
                 ...attachments.filter((attachment) => !state.composeForm.attachments.some((existing) => existing.id === attachment.id)),
             ];
         } catch (error) {
-            showError(error, '添加附件失败');
+            showError(error, 'Operation failed');
         } finally {
             if (event?.target) {
                 event.target.value = '';
@@ -1301,11 +1309,11 @@ function createStore() {
     const submitCompose = async () => {
         const recipients = parseRecipients(state.composeForm.to);
         if (!state.composeForm.mailbox_id) {
-            ElMessage.warning('请选择发信邮箱。');
+            ElMessage.warning('Please review the required fields.');
             return;
         }
         if (!recipients.length) {
-            ElMessage.warning('请至少填写一个收件人。');
+            ElMessage.warning('Please review the required fields.');
             return;
         }
 
@@ -1331,9 +1339,9 @@ function createStore() {
             if (state.currentView === 'inbox') {
                 await reloadEmails({ preserveSelection: true, selectFirst: true, forceStats: true });
             }
-            showSuccess('邮件已发送。');
+            showSuccess('Completed.');
         } catch (error) {
-            showError(error, '发送失败');
+            showError(error, 'Operation failed');
         } finally {
             state.composeSending = false;
         }
@@ -1378,7 +1386,7 @@ function createStore() {
             }
             return payload;
         } catch (error) {
-            showError(error, '识别服务商失败');
+            showError(error, 'Operation failed');
             return null;
         } finally {
             state.mailboxDetecting = false;
@@ -1418,7 +1426,7 @@ function createStore() {
     const openMailboxDrawer = async (mode = 'create', mailbox = null) => {
         state.mailboxFormMode = mode;
         state.editingMailboxId = mailbox?.id || null;
-        state.oauthStatus = '';
+        state.oauthStatus = 'OAuth window is blocked. Allow popups and try again.';
         state.detectedProvider = null;
         state.providerSelectionMode = mode === 'edit' ? 'manual' : 'auto';
         resetMailboxForm(mailbox);
@@ -1445,11 +1453,11 @@ function createStore() {
         const provider = activeProvider.value;
         const email = state.mailboxForm.email.trim().toLowerCase();
         if (!email) {
-            ElMessage.warning('请先填写邮箱地址。');
+            ElMessage.warning('Please review the required fields.');
             return;
         }
         if (!provider?.oauth?.start_endpoint) {
-            ElMessage.warning('当前服务商没有可用的 OAuth 流程。');
+            ElMessage.warning('Please review the required fields.');
             return;
         }
         try {
@@ -1457,18 +1465,18 @@ function createStore() {
             if (state.editingMailboxId) {
                 params.set('mailbox_id', String(state.editingMailboxId));
             }
-            state.oauthStatus = `正在打开 ${provider.label} 授权窗口...`;
+            state.oauthStatus = provider.label + ' authorization window opened.';
             const payload = await request(`${provider.oauth.start_endpoint}?${params.toString()}`);
             const popup = window.open(payload.authorization_url, `jmail-${payload.provider}-oauth`, 'width=760,height=820,resizable=yes,scrollbars=yes');
             if (!popup) {
-                state.oauthStatus = '授权窗口被拦截，请允许弹窗后重试。';
-                ElMessage.warning(state.oauthStatus);
+                state.oauthStatus = 'OAuth window is blocked. Allow popups and try again.';
+                ElMessage.warning('Please review the required fields.');
                 return;
             }
-            state.oauthStatus = `${provider.label} 授权窗口已打开。`;
+            state.oauthStatus = provider.label + ' authorization window opened.';
         } catch (error) {
-            state.oauthStatus = error?.message || 'OAuth 启动失败';
-            showError(error, '授权失败');
+            state.oauthStatus = error?.message || 'OAuth start failed';
+            showError(error, 'Operation failed');
         }
     };
 
@@ -1494,15 +1502,15 @@ function createStore() {
         };
 
         if (!payload.email || !payload.imap_server || !payload.smtp_server || !payload.imap_username || !payload.smtp_username) {
-            ElMessage.warning('请完整填写邮箱地址、服务器和用户名。');
+            ElMessage.warning('Please review the required fields.');
             return;
         }
         if (state.mailboxForm.use_oauth && state.mailboxFormMode !== 'edit') {
-            ElMessage.warning('新建 OAuth 邮箱请使用上方授权按钮完成接入。');
+            ElMessage.warning('Please review the required fields.');
             return;
         }
         if (state.mailboxFormMode !== 'edit' && !payload.use_oauth && (!payload.imap_password || !payload.smtp_password)) {
-            ElMessage.warning('新建手动邮箱时需要填写 IMAP 和 SMTP 密码。');
+            ElMessage.warning('Please review the required fields.');
             return;
         }
 
@@ -1527,9 +1535,9 @@ function createStore() {
             if (state.currentView === 'inbox') {
                 await reloadEmails({ preserveSelection: true, selectFirst: true, forceStats: true });
             }
-            showSuccess(state.mailboxFormMode === 'edit' ? '邮箱配置已更新。' : '邮箱已创建。');
+            showSuccess('Completed.');
         } catch (error) {
-            showError(error, '保存邮箱失败');
+            showError(error, 'Operation failed');
         } finally {
             state.mailboxSaving = false;
         }
@@ -1545,9 +1553,9 @@ function createStore() {
             if (state.currentView === 'inbox') {
                 await reloadEmails({ preserveSelection: true, selectFirst: true, forceStats: true });
             }
-            showSuccess(`${mailbox.name || mailbox.email} 已同步。`);
+            showSuccess('Completed.');
         } catch (error) {
-            showError(error, '同步失败');
+            showError(error, 'Operation failed');
         } finally {
             state.syncing = false;
         }
@@ -1555,7 +1563,7 @@ function createStore() {
 
     const syncCurrentScope = async () => {
         if (!state.mailboxes.length) {
-            ElMessage.warning('请先接入邮箱。');
+            ElMessage.warning('Please review the required fields.');
             return;
         }
         state.syncing = true;
@@ -1570,9 +1578,9 @@ function createStore() {
             if (state.currentView === 'inbox') {
                 await reloadEmails({ preserveSelection: true, selectFirst: true, forceStats: true });
             }
-            showSuccess(mailboxIds.length > 1 ? '全部邮箱已同步。' : '邮箱已同步。');
+            showSuccess('Completed.');
         } catch (error) {
-            showError(error, '同步失败');
+            showError(error, 'Operation failed');
         } finally {
             state.syncing = false;
         }
@@ -1585,7 +1593,7 @@ function createStore() {
 
     const deleteMailbox = async (mailbox) => {
         try {
-            await ElMessageBox.confirm(`确认删除邮箱 ${mailbox.email}？相关邮件也会删除。`, '删除邮箱', { type: 'warning' });
+            await ElMessageBox.confirm('Please confirm this action.', 'Confirm', { type: 'warning' });
             await request(`/mailboxes/${mailbox.id}`, { method: 'DELETE' });
             await loadMailboxes();
             await loadAllMailboxStats(true);
@@ -1593,10 +1601,10 @@ function createStore() {
             if (state.currentView === 'inbox') {
                 await reloadEmails({ preserveSelection: false, selectFirst: true, forceStats: true });
             }
-            showSuccess('邮箱已删除。');
+            showSuccess('Completed.');
         } catch (error) {
             if (error !== 'cancel') {
-                showError(error, '删除失败');
+                showError(error, 'Operation failed');
             }
         }
     };
@@ -1609,9 +1617,9 @@ function createStore() {
                 body: JSON.stringify(state.adminSettings),
             });
             state.adminSettingsLoaded = true;
-            showSuccess('系统设置已保存。');
+            showSuccess('Completed.');
         } catch (error) {
-            showError(error, '保存设置失败');
+            showError(error, 'Operation failed');
         } finally {
             state.adminSaving = false;
         }
@@ -1636,9 +1644,9 @@ function createStore() {
             });
             state.createUserDrawerOpen = false;
             await ensureAdminWorkspace(true);
-            showSuccess('用户已创建。');
+            showSuccess('Completed.');
         } catch (error) {
-            showError(error, '创建用户失败');
+            showError(error, 'Operation failed');
         } finally {
             state.userCreating = false;
         }
@@ -1646,43 +1654,40 @@ function createStore() {
 
     const generateRecoveryCode = async (user) => {
         try {
-            const payload = await request(`/admin/users/${user.id}/recovery-code`, { method: 'POST' });
-            await ElMessageBox.alert(`恢复码：${payload.recovery_code}<br>有效期至：${formatDateTime(payload.expires_at)}`, '恢复码', {
-                dangerouslyUseHTMLString: true,
-                confirmButtonText: '关闭',
-            });
+            await request('/admin/users/' + user.id + '/recovery-code', { method: 'POST' });
+            await ElMessageBox.alert('Recovery code generated.', 'Notice', { confirmButtonText: 'Close' });
         } catch (error) {
-            showError(error, '生成恢复码失败');
+            showError(error, 'Operation failed');
         }
     };
 
     const resetUserPassword = async (user) => {
         try {
-            const { value } = await ElMessageBox.prompt(`为 ${user.email} 设置新密码`, '重置密码', {
+            const { value } = await ElMessageBox.prompt('Enter a new value', 'Prompt', {
                 inputType: 'password',
                 inputPattern: /^.{6,}$/,
-                inputErrorMessage: '密码至少 6 位',
-                confirmButtonText: '提交',
-                cancelButtonText: '取消',
+                inputErrorMessage: 'Value is too short',
+                confirmButtonText: 'Confirm',
+                cancelButtonText: 'Cancel',
             });
             const payload = await request(`/admin/users/${user.id}/password?new_password=${encodeURIComponent(value)}&generate_recovery=true`, { method: 'POST' });
-            await ElMessageBox.alert(payload.recovery_code ? `密码已更新。新的恢复码：${payload.recovery_code}` : '密码已更新。', '完成');
+            await ElMessageBox.alert('Action completed.', 'Notice', { confirmButtonText: 'Close' });
         } catch (error) {
             if (error !== 'cancel') {
-                showError(error, '重置密码失败');
+                showError(error, 'Operation failed');
             }
         }
     };
 
     const deleteUser = async (user) => {
         try {
-            await ElMessageBox.confirm(`确认删除用户 ${user.email}？`, '删除用户', { type: 'warning' });
+            await ElMessageBox.confirm('Please confirm this action.', 'Confirm', { type: 'warning' });
             await request(`/admin/users/${user.id}`, { method: 'DELETE' });
             await ensureAdminWorkspace(true);
-            showSuccess('用户已删除。');
+            showSuccess('Completed.');
         } catch (error) {
             if (error !== 'cancel') {
-                showError(error, '删除用户失败');
+                showError(error, 'Operation failed');
             }
         }
     };
@@ -1697,9 +1702,9 @@ function createStore() {
                 }),
             });
             syncProfileForms();
-            showSuccess('个人资料已保存。');
+            showSuccess('Completed.');
         } catch (error) {
-            showError(error, '保存资料失败');
+            showError(error, 'Operation failed');
         } finally {
             state.profileSaving = false;
         }
@@ -1707,7 +1712,7 @@ function createStore() {
 
     const submitPassword = async () => {
         if (state.passwordForm.new_password !== state.passwordForm.confirm_password) {
-            ElMessage.warning('两次新密码不一致。');
+            ElMessage.warning('Please review the required fields.');
             return;
         }
         state.passwordSaving = true;
@@ -1720,9 +1725,9 @@ function createStore() {
                 }),
             });
             state.passwordForm = defaultPasswordForm();
-            showSuccess('密码已更新。');
+            showSuccess('Completed.');
         } catch (error) {
-            showError(error, '修改密码失败');
+            showError(error, 'Operation failed');
         } finally {
             state.passwordSaving = false;
         }
@@ -1739,7 +1744,7 @@ function createStore() {
         if (state.debugTapCount >= DEBUG_TAP_TARGET) {
             state.debugTapCount = 0;
             state.mobileDebugOpen = true;
-            showSuccess('开发者神域已开启。');
+            showSuccess('Completed.');
         }
     };
 
@@ -1756,9 +1761,9 @@ function createStore() {
         };
         try {
             await navigator.clipboard.writeText(JSON.stringify(snapshot, null, 2));
-            showSuccess('状态快照已复制。');
+            showSuccess('Completed.');
         } catch {
-            ElMessage.warning('当前环境无法复制到剪贴板。');
+            ElMessage.warning('Please review the required fields.');
         }
     };
 
@@ -1766,11 +1771,11 @@ function createStore() {
         const payload = event.data;
         if (!payload || payload.source !== 'jmail-mailbox-oauth') return;
         if (!payload.success) {
-            state.oauthStatus = payload.error_description || payload.error || 'OAuth 未完成。';
-            ElMessage.warning(state.oauthStatus);
+            state.oauthStatus = payload.error_description || payload.error || 'OAuth did not complete.';
+            ElMessage.warning('Please review the required fields.');
             return;
         }
-        state.oauthStatus = `${payload.email || '邮箱'} 已完成 ${payload.provider} 授权。`;
+        state.oauthStatus = (payload.email || 'Mailbox') + ' completed ' + payload.provider + ' authorization.';
         state.mailboxDrawerOpen = false;
         await loadMailboxes();
         await loadAllMailboxStats(true);
@@ -1778,7 +1783,7 @@ function createStore() {
         if (state.currentView === 'inbox') {
             await reloadEmails({ preserveSelection: true, selectFirst: true, forceStats: true });
         }
-        showSuccess(state.oauthStatus);
+        showSuccess('Completed.');
     };
 
     const handleMediaChange = (event) => {
@@ -1852,7 +1857,7 @@ function createStore() {
             writeStoredToken('');
             state.token = '';
             state.user = null;
-            showError(error, '登录已失效');
+            showError(error, 'Operation failed');
         } finally {
             state.booting = false;
         }
@@ -1887,7 +1892,10 @@ function createStore() {
         PRIMARY_NAV,
         SECONDARY_NAV,
         VIEW_META,
+        LOCALE_OPTIONS,
         state,
+        t,
+        setLocale,
         composeFileInput,
         isAdmin,
         currentViewMeta,
@@ -1998,6 +2006,7 @@ function createStore() {
         copyDebugSnapshot,
     };
 }
+
 
 
 

@@ -1,4 +1,4 @@
-﻿from datetime import datetime
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
@@ -6,6 +6,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 from app.models.enums import MailboxStatus
+
+DEFAULT_FETCH_FOLDERS = 'INBOX\nTrash'
 
 
 class Mailbox(Base):
@@ -39,6 +41,7 @@ class Mailbox(Base):
     oauth_token_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     fetch_interval: Mapped[int] = mapped_column(Integer, default=300)
+    fetch_folders: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default=DEFAULT_FETCH_FOLDERS)
     last_fetch: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -74,3 +77,19 @@ class Mailbox(Base):
         if self.last_error:
             return MailboxStatus.ERROR.value
         return MailboxStatus.ACTIVE.value
+
+    @property
+    def fetch_folder_list(self) -> list[str]:
+        raw_value = (self.fetch_folders or DEFAULT_FETCH_FOLDERS).replace(',', '\n')
+        folders: list[str] = []
+        seen: set[str] = set()
+        for item in raw_value.splitlines():
+            value = item.strip()
+            if not value:
+                continue
+            key = value.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            folders.append(value)
+        return folders or ['INBOX', 'Trash']

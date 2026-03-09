@@ -1,118 +1,118 @@
-﻿export const MOBILE_QUERY = '(max-width: 1024px)';
+export const MOBILE_QUERY = '(max-width: 1024px)';
 export const DEBUG_TAP_TARGET = 5;
 export const UI_PREFS_KEY = 'jmail_ui_prefs';
 export const EMAIL_SCOPE_ALL = 'all';
 
 export const VIEW_META = {
     inbox: {
-        kicker: 'Unified Inbox',
-        title: '统一收件箱',
-        description: '先总览全部邮箱，再下沉到单邮箱处理，阅读和决策始终保持在一条连续工作流中。',
+        kicker: 'Mail Center',
+        title: 'Mail Center',
+        description: 'Handle all inbox traffic in one place and switch by account or status when needed.',
     },
     overview: {
-        kicker: 'Mission Control',
-        title: '邮件总控台',
-        description: '把未读压力、邮箱健康、同步状态和配额集中在一个入口里先看清楚。',
+        kicker: 'Overview',
+        title: 'Operations Overview',
+        description: 'Review workload, sync health, quotas and alerts from one dashboard.',
     },
     accounts: {
-        kicker: 'Mailbox Studio',
-        title: '邮箱接入与同步',
-        description: '用更顺手的引导流程接入 Gmail、Outlook、QQ 或自定义 IMAP / SMTP。',
+        kicker: 'Accounts',
+        title: 'Mailbox Accounts',
+        description: 'Manage mailbox onboarding, sync state and connection settings in one place.',
     },
     admin: {
-        kicker: 'System Control',
-        title: '系统参数',
-        description: '控制注册、配额和默认同步策略，确保整个邮件系统的边界清晰可控。',
+        kicker: 'Admin',
+        title: 'System Policy',
+        description: 'Control registration policy, default quotas and sync rules.',
     },
     users: {
-        kicker: 'People',
-        title: '用户与权限',
-        description: '集中管理账号、密码重置和恢复码，让系统运维动作更直接。',
+        kicker: 'Users',
+        title: 'Users & Access',
+        description: 'Manage users, access and recovery workflows from one screen.',
     },
     profile: {
-        kicker: 'Identity',
-        title: '个人资料',
-        description: '在一个安静的空间里维护身份信息与登录安全。',
+        kicker: 'Profile',
+        title: 'Account Settings',
+        description: 'Maintain personal profile and account security settings.',
     },
 };
 
 export const PRIMARY_NAV = [
-    { key: 'inbox', label: '收件箱', short: '箱' },
-    { key: 'overview', label: '总览', short: '览' },
-    { key: 'accounts', label: '邮箱', short: '户' },
+    { key: 'overview', label: 'Overview', short: 'OV' },
+    { key: 'inbox', label: 'Mail Center', short: 'MC' },
+    { key: 'accounts', label: 'Mailboxes', short: 'MB' },
 ];
 
 export const SECONDARY_NAV = [
-    { key: 'profile', label: '我的', short: '我' },
+    { key: 'profile', label: 'Account Settings', short: 'ME' },
 ];
 
 export const ADMIN_NAV = [
-    { key: 'admin', label: '系统', short: '设' },
-    { key: 'users', label: '用户', short: '人' },
+    { key: 'admin', label: 'System Policy', short: 'AD' },
+    { key: 'users', label: 'Users & Access', short: 'US' },
 ];
 
 export const MOBILE_DOCK = [
-    { key: 'inbox', label: '收件箱' },
-    { key: 'overview', label: '总览' },
-    { key: 'accounts', label: '邮箱' },
+    { key: 'overview', label: 'Overview' },
+    { key: 'inbox', label: 'Mail' },
+    { key: 'accounts', label: 'Boxes' },
 ];
 
 export const EMAIL_FILTERS = [
-    { key: 'all', label: '收件箱', hint: '查看当前范围内待处理的收件箱邮件' },
-    { key: 'unread', label: '未读', hint: '优先处理还没读过的邮件' },
-    { key: 'flagged', label: '星标', hint: '查看被重点标记的对话' },
-    { key: 'read', label: '已读', hint: '回看已经处理过的内容' },
-    { key: 'archived', label: '已归档', hint: '查看沉淀后的历史邮件' },
-    { key: 'deleted', label: '已删除', hint: '查看已删除邮件并执行恢复或清理' },
+    { key: 'all', label: 'All Mail', hint: 'View all mail in the current scope' },
+    { key: 'unread', label: 'Unread', hint: 'Focus on unread mail first' },
+    { key: 'flagged', label: 'Flagged', hint: 'Review conversations marked as important' },
+    { key: 'read', label: 'Read', hint: 'Review messages that were already handled' },
+    { key: 'archived', label: 'Archived', hint: 'Review stored mail history' },
+    { key: 'deleted', label: 'Deleted', hint: 'Restore or purge deleted mail' },
 ];
 
 export const INBOX_VIEW_MODES = [
-    { key: 'thread', label: '会话视图' },
-    { key: 'message', label: '邮件视图' },
+    { key: 'thread', label: 'Threads' },
+    { key: 'message', label: 'Messages' },
 ];
 
 export const SEARCH_FIELD_OPTIONS = [
-    { key: 'all', label: '全部字段' },
-    { key: 'subject', label: '主题' },
-    { key: 'sender', label: '发件人' },
-    { key: 'recipients', label: '收件人' },
-    { key: 'content', label: '正文' },
-    { key: 'attachments', label: '附件' },
+    { key: 'all', label: 'All Fields' },
+    { key: 'subject', label: 'Subject' },
+    { key: 'sender', label: 'Sender' },
+    { key: 'recipients', label: 'Recipients' },
+    { key: 'content', label: 'Body' },
+    { key: 'attachments', label: 'Attachments' },
 ];
 
 export const RULE_FIELD_OPTIONS = [
-    { key: 'sender', label: '发件人' },
-    { key: 'subject', label: '主题' },
-    { key: 'content', label: '正文关键词' },
-    { key: 'attachments', label: '附件名称' },
+    { key: 'sender', label: 'Sender' },
+    { key: 'subject', label: 'Subject' },
+    { key: 'content', label: 'Body Keyword' },
+    { key: 'attachments', label: 'Attachment Name' },
 ];
 
 export const RULE_ACTION_OPTIONS = [
-    { key: 'archive', label: '归档' },
-    { key: 'mark_read', label: '标记已读' },
-    { key: 'flag', label: '设为星标' },
-    { key: 'delete', label: '移到已删除' },
+    { key: 'archive', label: 'Archive' },
+    { key: 'mark_read', label: 'Mark Read' },
+    { key: 'flag', label: 'Flag' },
+    { key: 'delete', label: 'Delete' },
 ];
 
 export const OVERVIEW_PILLARS = [
     {
-        title: '统一入口',
-        copy: '把所有邮箱收束到同一条邮件流里，避免在多个账户之间来回切屏。',
+        title: 'Unified Entry',
+        copy: 'Process multiple mailboxes from one consistent interface.',
     },
     {
-        title: '焦点阅读',
-        copy: '列表、摘要和阅读窗格始终联动，在桌面和手机上都能维持连续专注。',
+        title: 'Reliable Flow',
+        copy: 'List, detail, conversation and search follow one stable workflow.',
     },
     {
-        title: '顺手接入',
-        copy: '从邮箱识别、OAuth 到手动服务器配置，整个接入过程收进一套更短路径。',
+        title: 'Standard Onboarding',
+        copy: 'Use templates, OAuth and custom settings with equal clarity.',
     },
 ];
 
 export const KEYBOARD_SHORTCUTS = [
-    { key: '/', label: '定位搜索' },
-    { key: 'J', label: '下一封邮件' },
-    { key: 'K', label: '上一封邮件' },
-    { key: 'R', label: '回复当前邮件' },
-    { key: 'C', label: '写新邮件' },
+    { key: '/', label: 'Focus search' },
+    { key: 'J', label: 'Next message' },
+    { key: 'K', label: 'Previous message' },
+    { key: 'R', label: 'Reply' },
+    { key: 'C', label: 'Compose' },
 ];

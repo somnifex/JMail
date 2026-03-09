@@ -1,4 +1,4 @@
-﻿"""
+"""
 Pydantic 模型定义 - 用于请求/响应验证
 """
 from datetime import datetime
@@ -168,7 +168,7 @@ class MailboxCreate(MailboxBase):
     oauth_token_expires_at: Optional[datetime] = None
 
     fetch_interval: int = Field(default=300, ge=60, le=3600)
-
+    fetch_folders: Optional[str] = Field(default='INBOX\nTrash', max_length=2000)
 
 class MailboxUpdate(BaseModel):
     """更新邮箱模型"""
@@ -186,13 +186,13 @@ class MailboxUpdate(BaseModel):
     smtp_username: Optional[str] = Field(None, max_length=255)
     smtp_password: Optional[str] = None
     fetch_interval: Optional[int] = Field(None, ge=60, le=3600)
+    fetch_folders: Optional[str] = Field(None, max_length=2000)
     status: Optional[str] = None
     use_oauth: Optional[bool] = None
     oauth_provider: Optional[str] = None
     oauth_token: Optional[str] = None
     oauth_refresh_token: Optional[str] = None
     oauth_token_expires_at: Optional[datetime] = None
-
 
 class MailboxResponse(MailboxBase):
     """邮箱响应模型"""
@@ -214,11 +214,11 @@ class MailboxResponse(MailboxBase):
     oauth_token_expires_at: Optional[datetime] = None
     status: str
     fetch_interval: int
+    fetch_folders: Optional[str] = None
     last_fetch: Optional[datetime] = None
     last_error: Optional[str] = None
     created_at: datetime
     updated_at: datetime
-
 
 class MailboxInDB(MailboxResponse):
     """数据库中的邮箱模型（包含敏感信息）"""
@@ -269,7 +269,9 @@ class EmailCreate(EmailBase):
 
     sent_at: Optional[datetime] = None
     storage_path: Optional[str] = None
-
+    is_read: bool = False
+    is_deleted: bool = False
+    is_archived: bool = False
 
 class EmailUpdate(BaseModel):
     """更新邮件模型"""

@@ -1,4 +1,4 @@
-﻿from datetime import datetime, timedelta
+from datetime import datetime, timedelta
 from typing import List, Optional
 
 from fastapi import HTTPException, status
@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.models import Email, Mailbox, MailboxStatus
+from app.models.mailbox import DEFAULT_FETCH_FOLDERS
 from app.models.schemas import MailboxCreate, MailboxUpdate
 from app.services.mail_provider_service import MailProviderService
 from app.services.user_service import UserService
@@ -52,6 +53,23 @@ class MailboxService:
         result = await self.db.execute(select(func.count(Mailbox.id)))
         return int(result.scalar_one() or 0)
 
+    def normalize_fetch_folders(self, fetch_folders: Optional[str]) -> str:
+        raw_value = (fetch_folders or DEFAULT_FETCH_FOLDERS).replace(',', '\n')
+        folders: list[str] = []
+        seen: set[str] = set()
+        for item in raw_value.splitlines():
+            value = item.strip()
+            if not value:
+                continue
+            key = value.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            folders.append(value)
+        if not folders:
+            folders = ['INBOX', 'Trash']
+        return '\n'.join(folders)
+
     async def create(self, user_id: int, data: MailboxCreate) -> Mailbox:
         user = await self.user_service.get_by_id(user_id)
         if not user:
@@ -87,6 +105,7 @@ class MailboxService:
             oauth_refresh_token=data.oauth_refresh_token,
             oauth_token_expires_at=data.oauth_token_expires_at,
             fetch_interval=data.fetch_interval,
+            fetch_folders=self.normalize_fetch_folders(data.fetch_folders),
             is_active=True,
             last_error=None,
         )
@@ -123,6 +142,9 @@ class MailboxService:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Mailbox email already exists')
             update_data['email'] = normalized_email
 
+        if 'fetch_folders' in update_data:
+            update_data['fetch_folders'] = self.normalize_fetch_folders(update_data.get('fetch_folders'))
+
         for field, value in update_data.items():
             if value is None:
                 continue
@@ -144,6 +166,7 @@ class MailboxService:
         mailbox.imap_username = mailbox.imap_username.strip()
         mailbox.smtp_server = mailbox.smtp_server.strip()
         mailbox.smtp_username = mailbox.smtp_username.strip()
+        mailbox.fetch_folders = self.normalize_fetch_folders(mailbox.fetch_folders)
 
         await self.db.commit()
         await self.db.refresh(mailbox)
@@ -195,6 +218,7 @@ class MailboxService:
         expires_in = int(token_data.get('expires_in') or 3600)
         mailbox.oauth_token_expires_at = token_data.get('oauth_token_expires_at') or datetime.utcnow() + timedelta(seconds=expires_in)
         mailbox.fetch_interval = fetch_interval or mailbox.fetch_interval or 300
+        mailbox.fetch_folders = self.normalize_fetch_folders(mailbox.fetch_folders)
         mailbox.is_active = True
         mailbox.last_error = None
 
@@ -246,6 +270,3 @@ class MailboxService:
             'archived': int(archived_result.scalar_one() or 0),
             'deleted': int(deleted_result.scalar_one() or 0),
         }
-
-
-

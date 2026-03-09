@@ -1,4 +1,4 @@
-﻿"""
+"""
 邮件服务层 - 处理邮件存储、检索与会话聚合
 """
 import os
@@ -268,10 +268,10 @@ class EmailService:
             attachments=data.attachments,
             has_attachments=data.has_attachments,
             storage_path=data.storage_path,
-            is_read=False,
+            is_read=bool(data.is_read),
             is_starred=False,
-            is_deleted=False,
-            is_archived=False,
+            is_deleted=bool(data.is_deleted),
+            is_archived=bool(data.is_archived) and not bool(data.is_deleted),
         )
 
         self.db.add(email)
