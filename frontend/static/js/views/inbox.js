@@ -60,6 +60,8 @@ const RULE_TEMPLATES = [
     },
 ];
 
+const SEARCH_STATUS_OPTIONS = EMAIL_FILTERS.filter((item) => item.key !== 'flagged');
+
 function defaultRuleDraft() {
     return {
         name: '',
@@ -96,6 +98,7 @@ function buildSearchRecord(store) {
         ? [...store.state.searchFields]
         : ['all'];
     const hasAdvanced = fields.join(',') !== 'all'
+        || store.state.searchFlagged !== null
         || store.state.searchHasAttachments !== null
         || Boolean(store.state.searchDateFrom)
         || Boolean(store.state.searchDateTo)
@@ -106,23 +109,26 @@ function buildSearchRecord(store) {
         return null;
     }
 
-    const scopeLabel = store.currentScopeMailbox?.value?.name || store.currentScopeMailbox?.value?.email || 'All mailboxes';
-    const statusLabel = EMAIL_FILTERS.find((item) => item.key === store.state.emailStatus)?.label || 'Inbox';
+    const scopeLabel = store.currentScopeMailbox?.value?.name || store.currentScopeMailbox?.value?.email || store.t('All Mailboxes');
+    const statusLabel = store.t(EMAIL_FILTERS.find((item) => item.key === store.state.emailStatus)?.label || 'All Mail');
     const fieldLabel = fields.includes('all')
-        ? 'All fields'
-        : SEARCH_FIELD_OPTIONS.filter((item) => fields.includes(item.key)).map((item) => item.label).join(' / ');
+        ? store.t('All Fields')
+        : SEARCH_FIELD_OPTIONS.filter((item) => fields.includes(item.key)).map((item) => store.t(item.label)).join(' / ');
     const extras = [];
-    if (store.state.searchHasAttachments === true) extras.push('With attachments');
-    if (store.state.searchHasAttachments === false) extras.push('Without attachments');
-    if (store.state.searchDateFrom || store.state.searchDateTo) extras.push('Date filter');
+    if (store.state.searchFlagged === true) extras.push(store.t('Starred only'));
+    if (store.state.searchFlagged === false) extras.push(store.t('Unstarred only'));
+    if (store.state.searchHasAttachments === true) extras.push(store.t('With attachments'));
+    if (store.state.searchHasAttachments === false) extras.push(store.t('Without attachments'));
+    if (store.state.searchDateFrom || store.state.searchDateTo) extras.push(store.t('Date filter'));
 
     return {
-        id: `${query}|${store.state.emailScope}|${store.state.emailStatus}|${fields.join(',')}|${store.state.searchHasAttachments}|${store.state.searchDateFrom}|${store.state.searchDateTo}`,
+        id: `${query}|${store.state.emailScope}|${store.state.emailStatus}|${fields.join(',')}|${store.state.searchFlagged}|${store.state.searchHasAttachments}|${store.state.searchDateFrom}|${store.state.searchDateTo}`,
         label: query || `${statusLabel} / ${scopeLabel}`,
         query,
         scope: store.state.emailScope,
         status: store.state.emailStatus,
         searchFields: fields,
+        isFlagged: store.state.searchFlagged,
         hasAttachments: store.state.searchHasAttachments,
         dateFrom: store.state.searchDateFrom,
         dateTo: store.state.searchDateTo,
@@ -205,31 +211,37 @@ function useInboxWorkspace() {
     const searchSummaryChips = computed(() => {
         const chips = [];
         if (store.state.emailQuery.trim()) {
-            chips.push(`Query ${store.state.emailQuery.trim()}`);
+            chips.push(`${store.t('Query')} ${store.state.emailQuery.trim()}`);
         }
         if (!store.state.searchFields.includes('all')) {
             const fields = SEARCH_FIELD_OPTIONS
                 .filter((item) => store.state.searchFields.includes(item.key))
-                .map((item) => item.label)
+                .map((item) => store.t(item.label))
                 .join(' / ');
             if (fields) {
-                chips.push(`Fields ${fields}`);
+                chips.push(`${store.t('Fields')} ${fields}`);
             }
         }
         if (store.state.searchHasAttachments === true) {
-            chips.push('With attachments');
+            chips.push(store.t('With attachments'));
         }
         if (store.state.searchHasAttachments === false) {
-            chips.push('Without attachments');
+            chips.push(store.t('Without attachments'));
+        }
+        if (store.state.searchFlagged === true) {
+            chips.push(store.t('Starred only'));
+        }
+        if (store.state.searchFlagged === false) {
+            chips.push(store.t('Unstarred only'));
         }
         if (store.state.searchDateFrom || store.state.searchDateTo) {
-            chips.push(`Date ${store.state.searchDateFrom || 'Start'} to ${store.state.searchDateTo || 'Now'}`);
+            chips.push(`${store.t('Date')} ${store.state.searchDateFrom || store.t('Start')} ${store.t('to')} ${store.state.searchDateTo || store.t('Now')}`);
         }
         if (store.state.emailScope !== EMAIL_SCOPE_ALL) {
-            chips.push(`Mailbox ${store.currentScopeLabel.value}`);
+            chips.push(`${store.t('Mailbox scope')} ${store.currentScopeLabel.value}`);
         }
         if (store.state.emailStatus !== 'all') {
-            chips.push(`Folder ${EMAIL_FILTERS.find((item) => item.key === store.state.emailStatus)?.label || store.state.emailStatus}`);
+            chips.push(`${store.t('Folder')} ${store.t(EMAIL_FILTERS.find((item) => item.key === store.state.emailStatus)?.label || store.state.emailStatus)}`);
         }
         return chips;
     });
@@ -238,6 +250,13 @@ function useInboxWorkspace() {
     const ruleCountLabel = computed(() => `${store.activeRuleCount.value || 0} active`);
     const drawerDirection = computed(() => store.state.isMobile ? 'btt' : 'rtl');
     const drawerSize = computed(() => store.state.isMobile ? '92%' : '480px');
+    const searchStatusLabel = computed(() => EMAIL_FILTERS.find((item) => item.key === store.state.emailStatus)?.label || 'All Mail');
+    const flaggedFilterLabel = computed(() => {
+        if (store.state.searchFlagged === true) return 'Starred only';
+        if (store.state.searchFlagged === false) return 'Unstarred only';
+        return 'Any star state';
+    });
+    const searchScopeLabel = computed(() => store.state.emailScope === EMAIL_SCOPE_ALL ? 'All Mailboxes' : store.currentScopeLabel.value);
 
     const mailboxNameById = (mailboxId) => {
         if (!mailboxId) {
@@ -278,6 +297,7 @@ function useInboxWorkspace() {
         store.state.emailScope = item.scope ?? EMAIL_SCOPE_ALL;
         store.state.emailStatus = item.status || 'all';
         store.state.searchFields = Array.isArray(item.searchFields) && item.searchFields.length ? [...item.searchFields] : ['all'];
+        store.state.searchFlagged = Object.prototype.hasOwnProperty.call(item, 'isFlagged') ? item.isFlagged : null;
         store.state.searchHasAttachments = Object.prototype.hasOwnProperty.call(item, 'hasAttachments') ? item.hasAttachments : null;
         store.state.searchDateFrom = item.dateFrom || '';
         store.state.searchDateTo = item.dateTo || '';
@@ -300,6 +320,20 @@ function useInboxWorkspace() {
 
     const setAttachmentFilter = (value) => {
         store.state.searchHasAttachments = value;
+    };
+
+    const setFlaggedFilter = (value) => {
+        store.state.searchFlagged = value;
+    };
+
+    const setSearchStatus = async (value) => {
+        store.state.emailStatus = value;
+        await applySearch();
+    };
+
+    const setSearchScope = async (value) => {
+        store.state.emailScope = value;
+        await applySearch();
     };
 
     const switchViewMode = (mode) => {
@@ -467,6 +501,7 @@ function useInboxWorkspace() {
         || store.state.emailStatus !== 'all'
         || store.state.emailScope !== EMAIL_SCOPE_ALL
         || !store.state.searchFields.includes('all')
+        || store.state.searchFlagged !== null
         || store.state.searchHasAttachments !== null
         || store.state.searchDateFrom
         || store.state.searchDateTo
@@ -491,7 +526,10 @@ function useInboxWorkspace() {
         applySearch,
         useRecentSearch,
         toggleSearchField,
+        setFlaggedFilter,
         setAttachmentFilter,
+        setSearchStatus,
+        setSearchScope,
         switchViewMode,
         startEmailDrag,
         startThreadDrag,
@@ -511,8 +549,12 @@ function useInboxWorkspace() {
         ruleActionLabel,
         ruleOperatorLabel,
         messageStatusTone,
+        searchStatusLabel,
+        flaggedFilterLabel,
+        searchScopeLabel,
         INBOX_VIEW_MODES,
         SEARCH_FIELD_OPTIONS,
+        SEARCH_STATUS_OPTIONS,
         EMAIL_SCOPE_ALL,
     };
 }
@@ -655,6 +697,106 @@ const railTemplate = `
     </article>
 </div>`;
 
+const searchRailTemplate = `
+<div class="rail-stack rail-stack--studio rail-stack--search">
+    <article class="glass-panel rail-panel rail-panel--hero rail-panel--control rail-panel--search-overview">
+        <div class="section-head section-head--compact">
+            <div>
+                <p class="section-kicker">{{ t('Global Search') }}</p>
+                <h3>{{ t('Search Results') }}</h3>
+            </div>
+            <span class="status-pill" data-tone="info">{{ state.emailTotal }} {{ t('Results') }}</span>
+        </div>
+        <p class="rail-copy">{{ t('Search across every connected mailbox, then narrow results with Thunderbird-style facets.') }}</p>
+        <div class="scope-metrics scope-metrics--studio">
+            <div>
+                <span>{{ t('Query') }}</span>
+                <strong>{{ state.emailQuery || t('All Mail') }}</strong>
+            </div>
+            <div>
+                <span>{{ t('Mailbox scope') }}</span>
+                <strong>{{ t(searchScopeLabel) }}</strong>
+            </div>
+            <div>
+                <span>{{ t('Folder') }}</span>
+                <strong>{{ t(searchStatusLabel) }}</strong>
+            </div>
+            <div>
+                <span>{{ t('Flagged') }}</span>
+                <strong>{{ t(flaggedFilterLabel) }}</strong>
+            </div>
+        </div>
+    </article>
+
+    <article class="glass-panel rail-panel rail-panel--search-facets">
+        <div class="section-head section-head--compact">
+            <div>
+                <p class="section-kicker">{{ t('Refine Results') }}</p>
+                <h3>{{ t('Thunderbird-style facets') }}</h3>
+            </div>
+            <el-button text @click="applySearch()">{{ t('Search') }}</el-button>
+        </div>
+
+        <label class="search-field">
+            <span>{{ t('Mailbox scope') }}</span>
+            <select :value="state.emailScope" @change="setSearchScope($event.target.value)">
+                <option :value="EMAIL_SCOPE_ALL">{{ t('All Mailboxes') }}</option>
+                <option v-for="mailbox in state.mailboxes" :key="mailbox.id" :value="String(mailbox.id)">
+                    {{ mailbox.name || mailbox.email }}
+                </option>
+            </select>
+        </label>
+
+        <div class="search-panel__section">
+            <span class="search-panel__label">{{ t('Folder') }}</span>
+            <div class="chip-toggle-row">
+                <button
+                    v-for="filter in SEARCH_STATUS_OPTIONS"
+                    :key="filter.key"
+                    type="button"
+                    class="chip-toggle"
+                    :class="{ 'is-active': state.emailStatus === filter.key }"
+                    @click="setSearchStatus(filter.key)"
+                >
+                    {{ t(filter.label) }}
+                </button>
+            </div>
+        </div>
+
+        <div class="search-panel__section">
+            <span class="search-panel__label">{{ t('Flagged') }}</span>
+            <div class="chip-toggle-row">
+                <button type="button" class="chip-toggle" :class="{ 'is-active': state.searchFlagged === null }" @click="setFlaggedFilter(null); applySearch()">{{ t('Any star state') }}</button>
+                <button type="button" class="chip-toggle" :class="{ 'is-active': state.searchFlagged === true }" @click="setFlaggedFilter(true); applySearch()">{{ t('Starred only') }}</button>
+                <button type="button" class="chip-toggle" :class="{ 'is-active': state.searchFlagged === false }" @click="setFlaggedFilter(false); applySearch()">{{ t('Unstarred only') }}</button>
+            </div>
+        </div>
+
+        <div class="search-panel__section">
+            <span class="search-panel__label">{{ t('Attachments') }}</span>
+            <div class="chip-toggle-row">
+                <button type="button" class="chip-toggle" :class="{ 'is-active': state.searchHasAttachments === null }" @click="setAttachmentFilter(null); applySearch()">{{ t('Any attachment state') }}</button>
+                <button type="button" class="chip-toggle" :class="{ 'is-active': state.searchHasAttachments === true }" @click="setAttachmentFilter(true); applySearch()">{{ t('Has attachments') }}</button>
+                <button type="button" class="chip-toggle" :class="{ 'is-active': state.searchHasAttachments === false }" @click="setAttachmentFilter(false); applySearch()">{{ t('No attachments') }}</button>
+            </div>
+        </div>
+
+        <div v-if="searchSummaryChips.length" class="search-chip-row">
+            <span v-for="chip in searchSummaryChips" :key="chip" class="search-chip">{{ t(chip) }}</span>
+        </div>
+
+        <div v-if="inboxUi.recentSearches.length" class="search-recent">
+            <span class="search-panel__label">{{ t('Recent searches') }}</span>
+            <div class="search-recent__row">
+                <button v-for="item in inboxUi.recentSearches" :key="item.id" type="button" class="search-recent__item" @click="useRecentSearch(item)">
+                    <strong>{{ item.label }}</strong>
+                    <small>{{ item.meta }}</small>
+                </button>
+            </div>
+        </div>
+    </article>
+</div>`;
+
 const readerTemplate = `<div v-if="state.emailDetail" class="reader-stack" :class="{ 'is-mobile': mobile }">
     <header class="reader-header">
         <div class="reader-header__copy">
@@ -776,6 +918,13 @@ const RailColumn = {
     },
 };
 
+const SearchRail = {
+    template: searchRailTemplate,
+    setup() {
+        return useInboxWorkspace();
+    },
+};
+
 const messageTemplate = `
 <article class="glass-panel lane-panel lane-panel--inbox">
     <header class="lane-toolbar lane-toolbar--inbox">
@@ -785,33 +934,33 @@ const messageTemplate = `
                 v-model="state.emailQuery"
                 size="large"
                 clearable
-                placeholder="Search subject, sender, recipients or body"
+                :placeholder="t(state.currentView === 'search' ? 'Search all mailboxes' : 'Search subject, sender, recipients or body')"
                 @keyup.enter="applySearch()"
             />
-            <el-button type="primary" @click="applySearch()">Search</el-button>
+            <el-button type="primary" @click="applySearch()">{{ t('Search') }}</el-button>
         </div>
         <div class="lane-toolbar__actions lane-toolbar__actions--dense">
             <button type="button" class="ghost-button" @click="inboxUi.searchPanelOpen = !inboxUi.searchPanelOpen">
-                {{ inboxUi.searchPanelOpen ? 'Hide filters' : 'Advanced filters' }}
+                {{ inboxUi.searchPanelOpen ? t('Hide filters') : t('Advanced filters') }}
             </button>
-            <button type="button" class="ghost-button" @click="openRulesDrawer()">Rules</button>
-            <button v-if="state.isMobile" type="button" class="ghost-button" @click="state.mobileRailOpen = true">Folders</button>
+            <button v-if="state.currentView !== 'search'" type="button" class="ghost-button" @click="openRulesDrawer()">{{ t('Rules') }}</button>
+            <button v-if="state.isMobile" type="button" class="ghost-button" @click="state.mobileRailOpen = true">{{ state.currentView === 'search' ? t('Filters') : t('Folders') }}</button>
             <button v-if="state.isMobile && state.selectedEmailId" type="button" class="ghost-button" @click="openSelectedEmailOnMobile()">Open detail</button>
-            <button v-if="hasInboxFilters" type="button" class="ghost-button" @click="clearInboxQuery()">Clear</button>
+            <button v-if="hasInboxFilters" type="button" class="ghost-button" @click="clearInboxQuery()">{{ t('Clear') }}</button>
         </div>
     </header>
 
     <section v-if="inboxUi.searchPanelOpen" class="search-panel glass-subpanel">
         <div class="section-head section-head--compact">
             <div>
-                <p class="section-kicker">Advanced Search</p>
-                <h3>Combine fields, dates and attachments</h3>
+                <p class="section-kicker">{{ t('Advanced Search') }}</p>
+                <h3>{{ t('Combine fields, dates and attachments') }}</h3>
             </div>
-            <span class="status-pill" data-tone="info">{{ state.emailScope === EMAIL_SCOPE_ALL ? 'All mailboxes' : currentScopeLabel }}</span>
+            <span class="status-pill" data-tone="info">{{ state.emailScope === EMAIL_SCOPE_ALL ? t('All Mailboxes') : currentScopeLabel }}</span>
         </div>
         <div class="search-panel__grid">
             <div class="search-panel__section">
-                <span class="search-panel__label">Fields</span>
+                <span class="search-panel__label">{{ t('Fields') }}</span>
                 <div class="chip-toggle-row">
                     <button
                         v-for="field in SEARCH_FIELD_OPTIONS"
@@ -821,27 +970,60 @@ const messageTemplate = `
                         :class="{ 'is-active': state.searchFields.includes(field.key) }"
                         @click="toggleSearchField(field.key)"
                     >
-                        {{ field.label }}
+                        {{ t(field.label) }}
+                    </button>
+                </div>
+            </div>
+
+            <label class="search-field">
+                <span>{{ t('Mailbox scope') }}</span>
+                <select v-model="state.emailScope">
+                    <option :value="EMAIL_SCOPE_ALL">{{ t('All Mailboxes') }}</option>
+                    <option v-for="mailbox in state.mailboxes" :key="mailbox.id" :value="String(mailbox.id)">{{ mailbox.name || mailbox.email }}</option>
+                </select>
+            </label>
+
+            <div class="search-panel__section">
+                <span class="search-panel__label">{{ t('Folder') }}</span>
+                <div class="chip-toggle-row">
+                    <button
+                        v-for="filter in SEARCH_STATUS_OPTIONS"
+                        :key="filter.key"
+                        type="button"
+                        class="chip-toggle"
+                        :class="{ 'is-active': state.emailStatus === filter.key }"
+                        @click="state.emailStatus = filter.key"
+                    >
+                        {{ t(filter.label) }}
                     </button>
                 </div>
             </div>
 
             <div class="search-panel__section">
-                <span class="search-panel__label">Attachments</span>
+                <span class="search-panel__label">{{ t('Flagged') }}</span>
                 <div class="chip-toggle-row">
-                    <button type="button" class="chip-toggle" :class="{ 'is-active': state.searchHasAttachments === null }" @click="setAttachmentFilter(null)">Any</button>
-                    <button type="button" class="chip-toggle" :class="{ 'is-active': state.searchHasAttachments === true }" @click="setAttachmentFilter(true)">Has attachments</button>
-                    <button type="button" class="chip-toggle" :class="{ 'is-active': state.searchHasAttachments === false }" @click="setAttachmentFilter(false)">No attachments</button>
+                    <button type="button" class="chip-toggle" :class="{ 'is-active': state.searchFlagged === null }" @click="setFlaggedFilter(null)">{{ t('Any star state') }}</button>
+                    <button type="button" class="chip-toggle" :class="{ 'is-active': state.searchFlagged === true }" @click="setFlaggedFilter(true)">{{ t('Starred only') }}</button>
+                    <button type="button" class="chip-toggle" :class="{ 'is-active': state.searchFlagged === false }" @click="setFlaggedFilter(false)">{{ t('Unstarred only') }}</button>
+                </div>
+            </div>
+
+            <div class="search-panel__section">
+                <span class="search-panel__label">{{ t('Attachments') }}</span>
+                <div class="chip-toggle-row">
+                    <button type="button" class="chip-toggle" :class="{ 'is-active': state.searchHasAttachments === null }" @click="setAttachmentFilter(null)">{{ t('Any attachment state') }}</button>
+                    <button type="button" class="chip-toggle" :class="{ 'is-active': state.searchHasAttachments === true }" @click="setAttachmentFilter(true)">{{ t('Has attachments') }}</button>
+                    <button type="button" class="chip-toggle" :class="{ 'is-active': state.searchHasAttachments === false }" @click="setAttachmentFilter(false)">{{ t('No attachments') }}</button>
                 </div>
             </div>
 
             <label class="search-field">
-                <span>Start date</span>
+                <span>{{ t('Start date') }}</span>
                 <input v-model="state.searchDateFrom" type="date" />
             </label>
 
             <label class="search-field">
-                <span>End date</span>
+                <span>{{ t('End date') }}</span>
                 <input v-model="state.searchDateTo" type="date" />
             </label>
         </div>
@@ -851,7 +1033,7 @@ const messageTemplate = `
         </div>
 
         <div v-if="inboxUi.recentSearches.length" class="search-recent">
-            <span class="search-panel__label">Recent searches</span>
+            <span class="search-panel__label">{{ t('Recent searches') }}</span>
             <div class="search-recent__row">
                 <button v-for="item in inboxUi.recentSearches" :key="item.id" type="button" class="search-recent__item" @click="useRecentSearch(item)">
                     <strong>{{ item.label }}</strong>
@@ -1216,6 +1398,38 @@ export const InboxView = {
         </el-drawer>
 
         <RulesDrawer />
+    </section>
+    `,
+    setup() {
+        return useInboxWorkspace();
+    },
+};
+
+export const SearchView = {
+    components: {
+        SearchRail,
+        MessageColumn,
+        ReaderSurface,
+    },
+    template: `
+    <section class="desk-shell inbox-shell inbox-shell--studio inbox-shell--search">
+        <aside class="desk-rail" v-if="!state.isMobile">
+            <SearchRail />
+        </aside>
+        <div class="desk-stream">
+            <MessageColumn />
+        </div>
+        <div class="desk-reader" v-if="!state.isMobile">
+            <ReaderSurface />
+        </div>
+
+        <section v-if="state.isMobile && state.mobileReaderOpen" class="reader-overlay">
+            <ReaderSurface :mobile="true" />
+        </section>
+
+        <el-drawer v-if="state.isMobile" v-model="state.mobileRailOpen" direction="btt" size="88%" class="utility-drawer utility-drawer--rail" :title="t('Refine Results')">
+            <SearchRail />
+        </el-drawer>
     </section>
     `,
     setup() {

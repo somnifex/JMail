@@ -174,7 +174,11 @@ export const AdminView = {
                     <label class="field-label field-label--inline"><span>{{ t('Allow registration') }}</span><el-switch v-model="state.adminSettings.allow_registration" /></label>
                     <label class="field-label"><span>{{ t('Default mailbox limit') }}</span><el-input-number v-model="state.adminSettings.default_max_mailboxes_per_user" :min="1" :max="50" /></label>
                     <label class="field-label"><span>{{ t('Default sync interval (sec)') }}</span><el-input-number v-model="state.adminSettings.default_fetch_interval" :min="60" :max="3600" :step="60" /></label>
-                    <label class="field-label"><span>{{ t('Max messages per user') }}</span><el-input-number v-model="state.adminSettings.max_emails_per_user" :min="100" :max="10000" :step="100" /></label>
+                    <label class="field-label">
+                        <span>{{ t('Storage capacity (GB)') }}</span>
+                        <el-input-number v-model="adminStorageQuotaGb" :min="1" :max="1000" :step="1" />
+                        <p class="field-hint">{{ t('Current capacity: {value}', { value: formatFileSize(state.adminSettings.default_storage_quota_bytes) }) }}</p>
+                    </label>
                     <el-button type="primary" :loading="state.adminSaving" @click="submitAdminSettings()">{{ t('Save settings') }}</el-button>
                 </div>
             </article>

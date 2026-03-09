@@ -1,9 +1,13 @@
 export const MOBILE_QUERY = '(max-width: 1024px)';
-export const DEBUG_TAP_TARGET = 5;
 export const UI_PREFS_KEY = 'jmail_ui_prefs';
 export const EMAIL_SCOPE_ALL = 'all';
 
 export const VIEW_META = {
+    search: {
+        kicker: 'Global Search',
+        title: 'Search Results',
+        description: 'Search every mailbox, then narrow results with mailbox, folder, attachment and date facets.',
+    },
     inbox: {
         kicker: 'Mail Center',
         title: 'Mail Center',
@@ -107,12 +111,4 @@ export const OVERVIEW_PILLARS = [
         title: 'Standard Onboarding',
         copy: 'Use templates, OAuth and custom settings with equal clarity.',
     },
-];
-
-export const KEYBOARD_SHORTCUTS = [
-    { key: '/', label: 'Focus search' },
-    { key: 'J', label: 'Next message' },
-    { key: 'K', label: 'Previous message' },
-    { key: 'R', label: 'Reply' },
-    { key: 'C', label: 'Compose' },
 ];

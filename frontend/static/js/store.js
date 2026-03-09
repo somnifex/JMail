@@ -1,10 +1,8 @@
 ﻿import { apiRequest, readStoredToken, writeStoredToken } from './api.js';
 import {
     ADMIN_NAV,
-    DEBUG_TAP_TARGET,
     EMAIL_FILTERS,
     EMAIL_SCOPE_ALL,
-    KEYBOARD_SHORTCUTS,
     MOBILE_DOCK,
     MOBILE_QUERY,
     OVERVIEW_PILLARS,
@@ -38,6 +36,29 @@ import {
 
 const { reactive, computed, watch, nextTick, ref } = window.Vue;
 const { ElMessage, ElMessageBox } = window.ElementPlus;
+
+const THEME_OPTIONS = [
+    { value: 'light', label: 'Light' },
+    { value: 'dark', label: 'Dark' },
+    { value: 'system', label: 'Follow System' },
+];
+
+const BYTES_PER_GB = 1024 * 1024 * 1024;
+
+const ADMIN_SETTINGS_DEFAULTS = {
+    allow_registration: true,
+    default_max_mailboxes_per_user: 5,
+    default_fetch_interval: 300,
+    default_storage_quota_bytes: 10 * BYTES_PER_GB,
+};
+
+function normalizeThemeMode(value) {
+    return THEME_OPTIONS.some((option) => option.value === value) ? value : 'system';
+}
+
+function resolveThemeColor(theme) {
+    return theme === 'dark' ? '#08111d' : '#f3f7fb';
+}
 
 function defaultAuthForms() {
     return {
@@ -169,22 +190,38 @@ function createStore() {
     const composeFileInput = ref(null);
     const emailSearchInput = ref(null);
     let providerDetectTimer = null;
-    let mediaQueryList = null;
+    let mobileMediaQueryList = null;
+    let themeMediaQueryList = null;
     let initialized = false;
+    const initialThemeMode = normalizeThemeMode(uiPrefs.themeMode);
+
+    const detectSystemTheme = () => {
+        if (themeMediaQueryList) {
+            return themeMediaQueryList.matches ? 'dark' : 'light';
+        }
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+            return 'light';
+        }
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    };
 
     const state = reactive({
         booting: true,
         token: readStoredToken(),
         user: null,
         locale: readStoredLocale(),
+        themeMode: initialThemeMode,
+        resolvedTheme: initialThemeMode === 'system' ? detectSystemTheme() : initialThemeMode,
+        localeMenuOpen: false,
+        themeMenuOpen: false,
         currentView: uiPrefs.currentView || 'overview',
+        userMenuOpen: false,
         authMode: 'login',
         authForms: defaultAuthForms(),
         authSubmitting: false,
         mobileNavOpen: false,
         mobileRailOpen: false,
         mobileReaderOpen: false,
-        mobileDebugOpen: false,
         composeOpen: false,
         composeMode: 'new',
         composeForm: defaultComposeForm(),
@@ -212,6 +249,7 @@ function createStore() {
         detailLoading: false,
         emailQuery: '',
         searchFields: Array.isArray(uiPrefs.searchFields) && uiPrefs.searchFields.length ? uiPrefs.searchFields : ['all'],
+        searchFlagged: Object.prototype.hasOwnProperty.call(uiPrefs, 'searchFlagged') ? uiPrefs.searchFlagged : null,
         searchHasAttachments: Object.prototype.hasOwnProperty.call(uiPrefs, 'searchHasAttachments') ? uiPrefs.searchHasAttachments : null,
         searchDateFrom: uiPrefs.searchDateFrom || '',
         searchDateTo: uiPrefs.searchDateTo || '',
@@ -240,15 +278,8 @@ function createStore() {
         adminStats: null,
         adminUsers: [],
         adminSettingsLoaded: false,
-        adminSettings: {
-            allow_registration: true,
-            default_max_mailboxes_per_user: 5,
-            default_fetch_interval: 300,
-            max_emails_per_user: 1000,
-        },
+        adminSettings: { ...ADMIN_SETTINGS_DEFAULTS },
         isMobile: typeof window !== 'undefined' ? window.matchMedia(MOBILE_QUERY).matches : false,
-        debugTapCount: 0,
-        lastDebugTapAt: 0,
     });
 
     const request = async (endpoint, options = {}) => {
@@ -272,6 +303,22 @@ function createStore() {
         state.locale = locale === 'en-US' ? 'en-US' : 'zh-CN';
         writeStoredLocale(state.locale);
         updateDocumentTitle();
+    };
+    const applyThemeMode = () => {
+        const resolvedTheme = state.themeMode === 'system' ? detectSystemTheme() : state.themeMode;
+        state.resolvedTheme = resolvedTheme;
+        if (typeof document !== 'undefined') {
+            document.documentElement.setAttribute('data-theme', resolvedTheme);
+            document.documentElement.setAttribute('data-theme-mode', state.themeMode);
+            const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+            if (themeColorMeta) {
+                themeColorMeta.setAttribute('content', resolveThemeColor(resolvedTheme));
+            }
+        }
+    };
+    const setThemeMode = (mode) => {
+        state.themeMode = normalizeThemeMode(mode);
+        applyThemeMode();
     };
     const isAdmin = computed(() => state.user?.role === 'admin');
     const currentViewMeta = computed(() => VIEW_META[state.currentView] || VIEW_META.inbox);
@@ -325,6 +372,16 @@ function createStore() {
         }
         return Math.min(100, Math.round((state.mailboxes.length / limit) * 100));
     });
+    const adminStorageQuotaGb = computed({
+        get: () => {
+            const bytes = Number(state.adminSettings.default_storage_quota_bytes || ADMIN_SETTINGS_DEFAULTS.default_storage_quota_bytes);
+            return Math.max(1, Math.round(bytes / BYTES_PER_GB));
+        },
+        set: (value) => {
+            const quotaGb = Math.max(1, Math.round(Number(value) || 1));
+            state.adminSettings.default_storage_quota_bytes = quotaGb * BYTES_PER_GB;
+        },
+    });
     const activeRuleCount = computed(() => state.rules.filter((item) => item.is_active).length);
     const heroStats = computed(() => [
         { label: 'Unread', value: currentScopeStats.value.unread || 0, hint: 'Needs action' },
@@ -345,14 +402,29 @@ function createStore() {
                 emailStatus: state.emailStatus,
                 emailPageSize: state.emailPageSize,
                 searchFields: state.searchFields,
+                searchFlagged: state.searchFlagged,
                 searchHasAttachments: state.searchHasAttachments,
                 searchDateFrom: state.searchDateFrom,
                 searchDateTo: state.searchDateTo,
                 emailViewMode: state.emailViewMode,
+                themeMode: state.themeMode,
             }));
         } catch {
             // Ignore storage errors.
         }
+    };
+
+    const handleSystemThemeChange = () => {
+        if (state.themeMode === 'system') {
+            applyThemeMode();
+        }
+    };
+
+    const handleThemeContextSync = () => {
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+            return;
+        }
+        handleSystemThemeChange();
     };
 
     const updateDocumentTitle = () => {
@@ -511,7 +583,10 @@ function createStore() {
 
     const loadAdminSettings = async (force = false) => {
         if (state.adminSettingsLoaded && !force) return state.adminSettings;
-        state.adminSettings = await request('/admin/settings');
+        state.adminSettings = {
+            ...ADMIN_SETTINGS_DEFAULTS,
+            ...(await request('/admin/settings')),
+        };
         state.adminSettingsLoaded = true;
         return state.adminSettings;
     };
@@ -614,6 +689,9 @@ function createStore() {
         if (resetPage) {
             state.emailPage = 1;
         }
+        if (state.searchFlagged !== null && state.emailStatus === 'flagged') {
+            state.emailStatus = 'all';
+        }
         const retainedId = preserveSelection ? state.selectedEmailId : null;
         state.inboxLoading = true;
         try {
@@ -635,6 +713,9 @@ function createStore() {
             }
             if (Array.isArray(state.searchFields) && state.searchFields.length && !state.searchFields.includes('all')) {
                 params.set('search_fields', state.searchFields.join(','));
+            }
+            if (state.searchFlagged !== null) {
+                params.set('is_flagged', String(Boolean(state.searchFlagged)));
             }
             if (state.searchHasAttachments !== null) {
                 params.set('has_attachments', String(Boolean(state.searchHasAttachments)));
@@ -681,6 +762,9 @@ function createStore() {
         if (isAdmin.value) {
             await ensureAdminWorkspace(force);
         }
+        if (!isAdmin.value && ADMIN_NAV.some((item) => item.key === state.currentView)) {
+            state.currentView = 'overview';
+        }
         if (!state.mailboxes.length) {
             state.currentView = 'accounts';
             return;
@@ -691,13 +775,14 @@ function createStore() {
         if (state.currentView === 'profile') {
             syncProfileForms();
         }
-        if (state.currentView === 'inbox') {
+        if (state.currentView === 'inbox' || state.currentView === 'search') {
             await loadRules(force);
             await reloadEmails({ preserveSelection: true, selectFirst: true });
         }
     };
 
     const openView = async (view) => {
+        state.userMenuOpen = false;
         if (view === 'admin' || view === 'users') {
             if (!isAdmin.value) return;
             await ensureAdminWorkspace(false);
@@ -705,7 +790,7 @@ function createStore() {
         if (view === 'profile') {
             syncProfileForms();
         }
-        if (view === 'inbox' && !state.mailboxes.length) {
+        if ((view === 'inbox' || view === 'search') && !state.mailboxes.length) {
             state.currentView = 'accounts';
             state.mobileNavOpen = false;
             return;
@@ -713,10 +798,31 @@ function createStore() {
         state.currentView = view;
         state.mobileNavOpen = false;
         state.mobileReaderOpen = false;
-        if (view === 'inbox') {
+        if (view === 'inbox' || view === 'search') {
             await loadRules(false);
             await reloadEmails({ preserveSelection: true, selectFirst: true });
         }
+    };
+
+    const openGlobalSearch = async (query = state.emailQuery) => {
+        state.emailQuery = String(query || '').trim();
+        state.emailScope = EMAIL_SCOPE_ALL;
+        state.emailStatus = 'all';
+        state.searchFields = ['all'];
+        state.searchFlagged = null;
+        state.searchHasAttachments = null;
+        state.searchDateFrom = '';
+        state.searchDateTo = '';
+        state.currentView = 'search';
+        state.mobileNavOpen = false;
+        state.mobileReaderOpen = false;
+
+        if (!state.mailboxes.length) {
+            state.currentView = 'accounts';
+            return;
+        }
+
+        await reloadEmails({ resetPage: true, preserveSelection: false });
     };
 
     const refreshCurrentView = async () => {
@@ -816,6 +922,7 @@ function createStore() {
         state.token = '';
         state.user = null;
         state.currentView = 'overview';
+        state.userMenuOpen = false;
         state.mailboxes = [];
         state.mailboxStats = {};
         state.emails = [];
@@ -829,7 +936,6 @@ function createStore() {
         state.mobileNavOpen = false;
         state.mobileRailOpen = false;
         state.mobileReaderOpen = false;
-        state.mobileDebugOpen = false;
         state.authForms = defaultAuthForms();
         state.authMode = 'login';
         showSuccess('Completed.');
@@ -858,6 +964,7 @@ function createStore() {
     const clearInboxQuery = async () => {
         state.emailQuery = '';
         state.searchFields = ['all'];
+        state.searchFlagged = null;
         state.searchHasAttachments = null;
         state.searchDateFrom = '';
         state.searchDateTo = '';
@@ -1496,7 +1603,6 @@ function createStore() {
             smtp_username: state.mailboxForm.smtp_username.trim(),
             smtp_password: state.mailboxForm.smtp_password || null,
             fetch_interval: Number(state.mailboxForm.fetch_interval),
-            status: state.mailboxForm.status,
             use_oauth: Boolean(state.mailboxForm.use_oauth),
             oauth_provider: state.mailboxForm.oauth_provider || null,
         };
@@ -1519,7 +1625,10 @@ function createStore() {
             if (state.mailboxFormMode === 'edit' && state.editingMailboxId) {
                 await request(`/mailboxes/${state.editingMailboxId}`, {
                     method: 'PUT',
-                    body: JSON.stringify(payload),
+                    body: JSON.stringify({
+                        ...payload,
+                        status: state.mailboxForm.status,
+                    }),
                 });
             } else {
                 payload.use_oauth = false;
@@ -1612,10 +1721,20 @@ function createStore() {
     const submitAdminSettings = async () => {
         state.adminSaving = true;
         try {
+            const payload = {
+                allow_registration: state.adminSettings.allow_registration,
+                default_max_mailboxes_per_user: Number(state.adminSettings.default_max_mailboxes_per_user),
+                default_fetch_interval: Number(state.adminSettings.default_fetch_interval),
+                default_storage_quota_bytes: Number(state.adminSettings.default_storage_quota_bytes),
+            };
             state.adminSettings = await request('/admin/settings', {
                 method: 'PUT',
-                body: JSON.stringify(state.adminSettings),
+                body: JSON.stringify(payload),
             });
+            state.adminSettings = {
+                ...ADMIN_SETTINGS_DEFAULTS,
+                ...state.adminSettings,
+            };
             state.adminSettingsLoaded = true;
             showSuccess('Completed.');
         } catch (error) {
@@ -1733,40 +1852,6 @@ function createStore() {
         }
     };
 
-    const handleBrandGesture = () => {
-        if (!state.isMobile) return;
-        const now = Date.now();
-        if (now - state.lastDebugTapAt > 1600) {
-            state.debugTapCount = 0;
-        }
-        state.lastDebugTapAt = now;
-        state.debugTapCount += 1;
-        if (state.debugTapCount >= DEBUG_TAP_TARGET) {
-            state.debugTapCount = 0;
-            state.mobileDebugOpen = true;
-            showSuccess('Completed.');
-        }
-    };
-
-    const copyDebugSnapshot = async () => {
-        const snapshot = {
-            view: state.currentView,
-            emailScope: state.emailScope,
-            selectedMailboxId: state.selectedMailboxId,
-            selectedEmailId: state.selectedEmailId,
-            mailboxes: state.mailboxes.length,
-            unread: aggregateStats.value.unread,
-            version: state.systemInfo?.app_version || null,
-            user: state.user?.email || null,
-        };
-        try {
-            await navigator.clipboard.writeText(JSON.stringify(snapshot, null, 2));
-            showSuccess('Completed.');
-        } catch {
-            ElMessage.warning('Please review the required fields.');
-        }
-    };
-
     const handleOAuthMessage = async (event) => {
         const payload = event.data;
         if (!payload || payload.source !== 'jmail-mailbox-oauth') return;
@@ -1792,7 +1877,6 @@ function createStore() {
             state.mobileNavOpen = false;
             state.mobileRailOpen = false;
             state.mobileReaderOpen = false;
-            state.mobileDebugOpen = false;
         }
     };
 
@@ -1834,15 +1918,24 @@ function createStore() {
             return;
         }
         initialized = true;
-        mediaQueryList = window.matchMedia(MOBILE_QUERY);
-        state.isMobile = mediaQueryList.matches;
-        if (mediaQueryList.addEventListener) {
-            mediaQueryList.addEventListener('change', handleMediaChange);
+        mobileMediaQueryList = window.matchMedia(MOBILE_QUERY);
+        themeMediaQueryList = window.matchMedia('(prefers-color-scheme: dark)');
+        state.isMobile = mobileMediaQueryList.matches;
+        applyThemeMode();
+        if (mobileMediaQueryList.addEventListener) {
+            mobileMediaQueryList.addEventListener('change', handleMediaChange);
         } else {
-            mediaQueryList.addListener(handleMediaChange);
+            mobileMediaQueryList.addListener(handleMediaChange);
+        }
+        if (themeMediaQueryList.addEventListener) {
+            themeMediaQueryList.addEventListener('change', handleSystemThemeChange);
+        } else {
+            themeMediaQueryList.addListener(handleSystemThemeChange);
         }
         window.addEventListener('message', handleOAuthMessage);
         window.addEventListener('keydown', handleKeyboardShortcuts);
+        window.addEventListener('focus', handleThemeContextSync);
+        document.addEventListener('visibilitychange', handleThemeContextSync);
 
         if (!state.token) {
             state.booting = false;
@@ -1867,20 +1960,30 @@ function createStore() {
         if (providerDetectTimer) {
             clearTimeout(providerDetectTimer);
         }
-        if (mediaQueryList) {
-            if (mediaQueryList.removeEventListener) {
-                mediaQueryList.removeEventListener('change', handleMediaChange);
+        if (mobileMediaQueryList) {
+            if (mobileMediaQueryList.removeEventListener) {
+                mobileMediaQueryList.removeEventListener('change', handleMediaChange);
             } else {
-                mediaQueryList.removeListener(handleMediaChange);
+                mobileMediaQueryList.removeListener(handleMediaChange);
+            }
+        }
+        if (themeMediaQueryList) {
+            if (themeMediaQueryList.removeEventListener) {
+                themeMediaQueryList.removeEventListener('change', handleSystemThemeChange);
+            } else {
+                themeMediaQueryList.removeListener(handleSystemThemeChange);
             }
         }
         window.removeEventListener('message', handleOAuthMessage);
         window.removeEventListener('keydown', handleKeyboardShortcuts);
+        window.removeEventListener('focus', handleThemeContextSync);
+        document.removeEventListener('visibilitychange', handleThemeContextSync);
         initialized = false;
     };
 
     watch(() => [state.user?.id || null, state.currentView, state.authMode, currentScopeLabel.value], updateDocumentTitle, { immediate: true });
-    watch(() => [state.currentView, state.emailScope, state.emailStatus, state.emailPageSize, JSON.stringify(state.searchFields), state.searchHasAttachments, state.searchDateFrom, state.searchDateTo, state.emailViewMode], persistUiPrefs, { immediate: true });
+    watch(() => [state.currentView, state.emailScope, state.emailStatus, state.emailPageSize, JSON.stringify(state.searchFields), state.searchFlagged, state.searchHasAttachments, state.searchDateFrom, state.searchDateTo, state.emailViewMode, state.themeMode], persistUiPrefs, { immediate: true });
+    watch(() => state.themeMode, applyThemeMode, { immediate: true });
 
     return {
         ADMIN_NAV,
@@ -1893,9 +1996,11 @@ function createStore() {
         SECONDARY_NAV,
         VIEW_META,
         LOCALE_OPTIONS,
+        THEME_OPTIONS,
         state,
         t,
         setLocale,
+        setThemeMode,
         composeFileInput,
         isAdmin,
         currentViewMeta,
@@ -1910,6 +2015,7 @@ function createStore() {
         currentScopeStats,
         mailboxHealthCards,
         mailboxUsagePercent,
+        adminStorageQuotaGb,
         heroStats,
         activeRuleCount,
         emailGroups,
@@ -1939,6 +2045,7 @@ function createStore() {
         loadRules,
         loadConversationForEmail,
         openView,
+        openGlobalSearch,
         refreshCurrentView,
         reloadEmails,
         submitLogin,
@@ -2002,8 +2109,6 @@ function createStore() {
         deleteUser,
         submitProfile,
         submitPassword,
-        handleBrandGesture,
-        copyDebugSnapshot,
     };
 }
 

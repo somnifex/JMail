@@ -15,6 +15,11 @@ export function writeStoredToken(token) {
 }
 
 export async function apiRequest(endpoint, options = {}) {
+    const requestUrl = /^https?:\/\//i.test(endpoint)
+        ? endpoint
+        : endpoint.startsWith(API_BASE)
+            ? endpoint
+            : `${API_BASE}${endpoint}`;
     const headers = {
         ...(options.headers || {}),
     };
@@ -28,7 +33,7 @@ export async function apiRequest(endpoint, options = {}) {
         headers.Authorization = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_BASE}${endpoint}`, {
+    const response = await fetch(requestUrl, {
         ...options,
         headers,
     });
