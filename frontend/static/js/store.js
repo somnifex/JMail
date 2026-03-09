@@ -1989,7 +1989,6 @@ function createStore() {
         ADMIN_NAV,
         EMAIL_FILTERS,
         EMAIL_SCOPE_ALL,
-        KEYBOARD_SHORTCUTS,
         MOBILE_DOCK,
         OVERVIEW_PILLARS,
         PRIMARY_NAV,

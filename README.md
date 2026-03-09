@@ -1,4 +1,5 @@
-﻿# JMail
+# JMail
+
 
 JMail 是一个基于 FastAPI + Vue 的多邮箱 Web 邮件工作台。
 
@@ -173,14 +174,11 @@ docker-compose logs -f
 
 - [http://localhost:8000](http://localhost:8000)
 
-## 默认管理员账号
+## 初始管理员账号
 
-首次启动时会自动创建管理员账号：
+首次启动时，系统会按环境变量自动创建管理员账号。
 
-- 邮箱：`admin@example.com`
-- 密码：`admin123`
-
-发布或部署前务必修改：
+`.env.example` 中提供的是占位值，发布或部署前务必修改：
 
 - `ADMIN_EMAIL`
 - `ADMIN_PASSWORD`
@@ -195,12 +193,12 @@ docker-compose logs -f
 | `HOST` | 服务监听地址 | `0.0.0.0` |
 | `PORT` | 服务端口 | `8000` |
 | `DEBUG` | 是否开启调试 / 自动重载 | `false` |
-| `SECRET_KEY` | JWT 签名密钥 | `change-this-to-a-random-secret-key-in-production` |
+| `SECRET_KEY` | JWT 签名密钥 | `replace-with-a-long-random-secret-key` |
 | `DATABASE_URL` | 数据库连接串 | `sqlite+aiosqlite:///./data/app.db` |
 | `DATA_DIR` | 数据目录 | `./data` |
 | `EMAIL_STORAGE_PATH` | 邮件原文存储目录 | `./data/emails` |
-| `ADMIN_EMAIL` | 初始管理员邮箱 | `admin@example.com` |
-| `ADMIN_PASSWORD` | 初始管理员密码 | `admin123` |
+| `ADMIN_EMAIL` | 初始管理员邮箱 | `admin@local.invalid` |
+| `ADMIN_PASSWORD` | 初始管理员密码 | `change-me-before-first-run` |
 | `ALLOW_REGISTRATION` | 是否允许公开注册 | `true` |
 | `DEFAULT_MAX_MAILBOXES_PER_USER` | 用户默认可接入邮箱数量 | `5` |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` | Gmail OAuth 配置 | 空 |

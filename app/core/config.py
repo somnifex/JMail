@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     HOST: str = '0.0.0.0'
     PORT: int = 8000
 
-    SECRET_KEY: str = 'change-this-secret-key'
+    SECRET_KEY: str = 'replace-with-a-long-random-secret-key'
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080
     DATABASE_URL: str = 'sqlite+aiosqlite:///./data/app.db'
 
@@ -29,8 +29,8 @@ class Settings(BaseSettings):
     DEFAULT_EMAIL_FETCH_INTERVAL: int = 300
     DEFAULT_STORAGE_QUOTA_BYTES: int = 10 * 1024 * 1024 * 1024  # 默认10GB存储配额
 
-    ADMIN_EMAIL: str = 'admin@example.com'
-    ADMIN_PASSWORD: str = 'admin123'
+    ADMIN_EMAIL: str = 'admin@local.invalid'
+    ADMIN_PASSWORD: str = 'change-me-before-first-run'
 
     ALLOW_REGISTRATION: bool = True
     DEFAULT_MAX_MAILBOXES_PER_USER: int = 5
