@@ -15,6 +15,7 @@ class SystemConfigService:
     """系统配置服务"""
 
     CONFIG_META = {
+        'system_name': '系统名称',
         'allow_registration': '是否允许用户注册',
         'default_max_mailboxes': '用户默认最大邮箱数量',
         'default_fetch_interval': '默认邮件抓取间隔（秒）',
@@ -27,6 +28,7 @@ class SystemConfigService:
 
     def _defaults(self) -> Dict[str, Any]:
         return {
+            'system_name': self.settings.APP_NAME,
             'allow_registration': self.settings.ALLOW_REGISTRATION,
             'default_max_mailboxes': self.settings.DEFAULT_MAX_MAILBOXES_PER_USER,
             'default_fetch_interval': self.settings.DEFAULT_EMAIL_FETCH_INTERVAL,
@@ -44,6 +46,10 @@ class SystemConfigService:
         if raw_value is None:
             return defaults[key]
 
+        if key == 'system_name':
+            value = str(raw_value).strip()
+            return value or str(defaults[key])
+
         if key == 'allow_registration':
             if isinstance(raw_value, bool):
                 return raw_value
@@ -59,6 +65,7 @@ class SystemConfigService:
         defaults = self._defaults()
 
         return SystemSettings(
+            system_name=self._coerce('system_name', stored.get('system_name', defaults['system_name'])),
             allow_registration=self._coerce('allow_registration', stored.get('allow_registration', defaults['allow_registration'])),
             default_max_mailboxes_per_user=self._coerce('default_max_mailboxes', stored.get('default_max_mailboxes', defaults['default_max_mailboxes'])),
             default_fetch_interval=self._coerce('default_fetch_interval', stored.get('default_fetch_interval', defaults['default_fetch_interval'])),
@@ -67,6 +74,7 @@ class SystemConfigService:
 
     async def update_runtime_settings(self, settings_update: SystemSettingsUpdate) -> SystemSettings:
         update_map = {
+            'system_name': settings_update.system_name.strip() if settings_update.system_name else None,
             'allow_registration': settings_update.allow_registration,
             'default_max_mailboxes': settings_update.default_max_mailboxes_per_user,
             'default_fetch_interval': settings_update.default_fetch_interval,

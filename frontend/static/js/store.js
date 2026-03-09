@@ -3,6 +3,7 @@ import {
     ADMIN_NAV,
     EMAIL_FILTERS,
     EMAIL_SCOPE_ALL,
+    INBOX_COMPACT_QUERY,
     MOBILE_DOCK,
     MOBILE_QUERY,
     OVERVIEW_PILLARS,
@@ -46,6 +47,7 @@ const THEME_OPTIONS = [
 const BYTES_PER_GB = 1024 * 1024 * 1024;
 
 const ADMIN_SETTINGS_DEFAULTS = {
+    system_name: 'JMail',
     allow_registration: true,
     default_max_mailboxes_per_user: 5,
     default_fetch_interval: 300,
@@ -191,6 +193,7 @@ function createStore() {
     const emailSearchInput = ref(null);
     let providerDetectTimer = null;
     let mobileMediaQueryList = null;
+    let inboxCompactMediaQueryList = null;
     let themeMediaQueryList = null;
     let initialized = false;
     const initialThemeMode = normalizeThemeMode(uiPrefs.themeMode);
@@ -280,6 +283,7 @@ function createStore() {
         adminSettingsLoaded: false,
         adminSettings: { ...ADMIN_SETTINGS_DEFAULTS },
         isMobile: typeof window !== 'undefined' ? window.matchMedia(MOBILE_QUERY).matches : false,
+        isInboxCompact: typeof window !== 'undefined' ? window.matchMedia(INBOX_COMPACT_QUERY).matches : false,
     });
 
     const request = async (endpoint, options = {}) => {
@@ -433,10 +437,11 @@ function createStore() {
             register: 'Create account',
             reset: 'Reset password',
         };
+        const systemName = state.systemInfo?.app_name || state.adminSettings.system_name || ADMIN_SETTINGS_DEFAULTS.system_name;
         const title = state.user
             ? (state.currentView === 'inbox' ? currentScopeLabel.value : t(currentViewMeta.value.title))
             : t(authTitleMap[state.authMode] || 'Welcome');
-        document.title = `JMail | ${title}`;
+        document.title = `${systemName} | ${title}`;
     };
 
     const showError = (error, fallback = 'Operation failed') => {
@@ -524,6 +529,7 @@ function createStore() {
     const loadSystemInfo = async (force = false) => {
         if (state.systemInfo && !force) return state.systemInfo;
         state.systemInfo = await request('/system/info');
+        updateDocumentTitle();
         return state.systemInfo;
     };
 
@@ -666,7 +672,7 @@ function createStore() {
                     await loadMailboxStats(email.mailbox_id, true);
                 }
             }
-            if (openReader && state.isMobile) {
+            if (openReader && (state.isMobile || state.isInboxCompact)) {
                 state.mobileReaderOpen = true;
             }
             return email;
@@ -1013,7 +1019,7 @@ function createStore() {
         const nextIndex = currentIndex < 0 ? 0 : Math.min(state.emails.length - 1, Math.max(0, currentIndex + direction));
         const email = state.emails[nextIndex];
         if (email) {
-            await selectEmail(email, state.isMobile && state.mobileReaderOpen);
+            await selectEmail(email, (state.isMobile || state.isInboxCompact) && state.mobileReaderOpen);
         }
     };
 
@@ -1722,6 +1728,7 @@ function createStore() {
         state.adminSaving = true;
         try {
             const payload = {
+                system_name: String(state.adminSettings.system_name || ADMIN_SETTINGS_DEFAULTS.system_name).trim() || ADMIN_SETTINGS_DEFAULTS.system_name,
                 allow_registration: state.adminSettings.allow_registration,
                 default_max_mailboxes_per_user: Number(state.adminSettings.default_max_mailboxes_per_user),
                 default_fetch_interval: Number(state.adminSettings.default_fetch_interval),
@@ -1736,6 +1743,8 @@ function createStore() {
                 ...state.adminSettings,
             };
             state.adminSettingsLoaded = true;
+            await loadSystemInfo(true);
+            updateDocumentTitle();
             showSuccess('Completed.');
         } catch (error) {
             showError(error, 'Operation failed');
@@ -1880,6 +1889,14 @@ function createStore() {
         }
     };
 
+    const handleInboxCompactChange = (event) => {
+        state.isInboxCompact = event.matches;
+        if (!state.isInboxCompact) {
+            state.mobileRailOpen = false;
+            state.mobileReaderOpen = false;
+        }
+    };
+
     const handleKeyboardShortcuts = (event) => {
         if (!state.user || state.isMobile || event.metaKey || event.ctrlKey || event.altKey) {
             return;
@@ -1919,13 +1936,20 @@ function createStore() {
         }
         initialized = true;
         mobileMediaQueryList = window.matchMedia(MOBILE_QUERY);
+        inboxCompactMediaQueryList = window.matchMedia(INBOX_COMPACT_QUERY);
         themeMediaQueryList = window.matchMedia('(prefers-color-scheme: dark)');
         state.isMobile = mobileMediaQueryList.matches;
+        state.isInboxCompact = inboxCompactMediaQueryList.matches;
         applyThemeMode();
         if (mobileMediaQueryList.addEventListener) {
             mobileMediaQueryList.addEventListener('change', handleMediaChange);
         } else {
             mobileMediaQueryList.addListener(handleMediaChange);
+        }
+        if (inboxCompactMediaQueryList.addEventListener) {
+            inboxCompactMediaQueryList.addEventListener('change', handleInboxCompactChange);
+        } else {
+            inboxCompactMediaQueryList.addListener(handleInboxCompactChange);
         }
         if (themeMediaQueryList.addEventListener) {
             themeMediaQueryList.addEventListener('change', handleSystemThemeChange);
@@ -1936,6 +1960,12 @@ function createStore() {
         window.addEventListener('keydown', handleKeyboardShortcuts);
         window.addEventListener('focus', handleThemeContextSync);
         document.addEventListener('visibilitychange', handleThemeContextSync);
+
+        try {
+            await loadSystemInfo(true);
+        } catch {
+            // Ignore public system info load failures during boot.
+        }
 
         if (!state.token) {
             state.booting = false;
@@ -1967,6 +1997,13 @@ function createStore() {
                 mobileMediaQueryList.removeListener(handleMediaChange);
             }
         }
+        if (inboxCompactMediaQueryList) {
+            if (inboxCompactMediaQueryList.removeEventListener) {
+                inboxCompactMediaQueryList.removeEventListener('change', handleInboxCompactChange);
+            } else {
+                inboxCompactMediaQueryList.removeListener(handleInboxCompactChange);
+            }
+        }
         if (themeMediaQueryList) {
             if (themeMediaQueryList.removeEventListener) {
                 themeMediaQueryList.removeEventListener('change', handleSystemThemeChange);
@@ -1981,7 +2018,7 @@ function createStore() {
         initialized = false;
     };
 
-    watch(() => [state.user?.id || null, state.currentView, state.authMode, currentScopeLabel.value], updateDocumentTitle, { immediate: true });
+    watch(() => [state.user?.id || null, state.currentView, state.authMode, currentScopeLabel.value, state.systemInfo?.app_name || '', state.adminSettings.system_name || ''], updateDocumentTitle, { immediate: true });
     watch(() => [state.currentView, state.emailScope, state.emailStatus, state.emailPageSize, JSON.stringify(state.searchFields), state.searchFlagged, state.searchHasAttachments, state.searchDateFrom, state.searchDateTo, state.emailViewMode, state.themeMode], persistUiPrefs, { immediate: true });
     watch(() => state.themeMode, applyThemeMode, { immediate: true });
 

@@ -171,6 +171,7 @@ export const AdminView = {
                     </div>
                 </div>
                 <div class="form-stack form-stack--narrow">
+                    <label class="field-label"><span>{{ t('System name') }}</span><el-input v-model="state.adminSettings.system_name" :placeholder="t('Enter system name')" maxlength="100" /></label>
                     <label class="field-label field-label--inline"><span>{{ t('Allow registration') }}</span><el-switch v-model="state.adminSettings.allow_registration" /></label>
                     <label class="field-label"><span>{{ t('Default mailbox limit') }}</span><el-input-number v-model="state.adminSettings.default_max_mailboxes_per_user" :min="1" :max="50" /></label>
                     <label class="field-label"><span>{{ t('Default sync interval (sec)') }}</span><el-input-number v-model="state.adminSettings.default_fetch_interval" :min="60" :max="3600" :step="60" /></label>

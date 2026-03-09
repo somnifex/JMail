@@ -404,11 +404,27 @@ const WorkspaceShell = {
 
         <aside class="workspace-sidebar" :class="{ 'is-open': state.mobileNavOpen }">
             <div class="sidebar-head sidebar-head--stacked">
-                <div class="brand-cluster brand-cluster--sidebar">
-                    <div class="brand-mark">J</div>
-                    <div>
-                        <p class="section-kicker">{{ state.systemInfo?.app_name || 'JMail' }}</p>
-                        <h2>{{ state.systemInfo?.app_version || t('Business Mail') }}</h2>
+                <div class="sidebar-brand-card">
+                    <div class="sidebar-brand-card__surface">
+                        <div class="sidebar-brand-card__hero">
+                            <div class="sidebar-brand-logo-wrap">
+                                <img class="sidebar-brand-logo" src="/logo/jmail.png" alt="JMail logo">
+                            </div>
+                            <div class="sidebar-brand-card__copy">
+                                <div class="sidebar-brand-card__titleline">
+                                        <p class="section-kicker">JMAIL</p>
+                                    <span class="sidebar-brand-card__version">v{{ state.systemInfo?.app_version || '1.0.0' }}</span>
+                                </div>
+                                <h2>{{ state.systemInfo?.app_name || 'JMail' }}</h2>
+                                <p class="sidebar-brand-card__tagline">{{ t('Mail workspace') }}</p>
+                            </div>
+                        </div>
+
+                        <div class="sidebar-brand-card__meta">
+                            <span>{{ userRoleLabel(state.user?.role) }}</span>
+                            <span class="sidebar-brand-card__meta-dot"></span>
+                            <span>{{ t('Online') }}</span>
+                        </div>
                     </div>
                 </div>
                 <div v-if="state.isMobile" class="sidebar-head__actions">
@@ -590,73 +606,73 @@ const OverlayDrawers = {
             :direction="state.isMobile ? 'btt' : 'rtl'"
             :size="state.isMobile ? '94%' : '560px'"
             class="utility-drawer"
-            :title="state.composeMode === 'reply' ? 'Reply Email' : 'Compose Email'"
+            :title="t(state.composeMode === 'reply' ? 'Reply Email' : 'Compose Email')"
         >
             <div class="drawer-form drawer-form--compose">
                 <section class="drawer-section drawer-section--compact">
                     <div class="drawer-section__head">
                         <div>
-                            <p class="section-kicker">Message</p>
-                            <h3>{{ state.composeMode === 'reply' ? 'Reply draft' : 'New message' }}</h3>
+                            <p class="section-kicker">{{ t('Message') }}</p>
+                            <h3>{{ t(state.composeMode === 'reply' ? 'Reply draft' : 'New message') }}</h3>
                         </div>
                         <div class="drawer-summary">
                             <div class="drawer-summary__item">
-                                <span>Mailboxes</span>
+                                <span>{{ t('Mailboxes') }}</span>
                                 <strong>{{ state.mailboxes.length }}</strong>
                             </div>
                             <div class="drawer-summary__item">
-                                <span>Attachments</span>
+                                <span>{{ t('Attachments') }}</span>
                                 <strong>{{ state.composeForm.attachments.length }}</strong>
                             </div>
                         </div>
                     </div>
                     <label class="field-label">
-                        <span>From mailbox</span>
-                        <el-select v-model="state.composeForm.mailbox_id" placeholder="Select mailbox">
+                        <span>{{ t('From mailbox') }}</span>
+                        <el-select v-model="state.composeForm.mailbox_id" :placeholder="t('Select mailbox')">
                             <el-option v-for="mailbox in state.mailboxes" :key="mailbox.id" :value="mailbox.id" :label="mailboxOptionLabel(mailbox)" />
                         </el-select>
                     </label>
                     <label class="field-label">
-                        <span>To</span>
-                        <el-input v-model="state.composeForm.to" placeholder="Separate multiple addresses with commas" />
+                        <span>{{ t('To') }}</span>
+                        <el-input v-model="state.composeForm.to" :placeholder="t('Separate multiple addresses with commas')" />
                     </label>
                     <div class="field-grid field-grid--compact">
                         <label class="field-label">
-                            <span>CC</span>
-                            <el-input v-model="state.composeForm.cc" placeholder="Optional" />
+                            <span>{{ t('CC') }}</span>
+                            <el-input v-model="state.composeForm.cc" :placeholder="t('Optional')" />
                         </label>
                         <label class="field-label">
-                            <span>BCC</span>
-                            <el-input v-model="state.composeForm.bcc" placeholder="Optional" />
+                            <span>{{ t('BCC') }}</span>
+                            <el-input v-model="state.composeForm.bcc" :placeholder="t('Optional')" />
                         </label>
                     </div>
                     <label class="field-label">
-                        <span>Subject</span>
-                        <el-input v-model="state.composeForm.subject" placeholder="Enter message subject" />
+                        <span>{{ t('Subject') }}</span>
+                        <el-input v-model="state.composeForm.subject" :placeholder="t('Enter message subject')" />
                     </label>
                 </section>
 
                 <section class="drawer-section">
                     <div class="drawer-section__head">
                         <div>
-                            <p class="section-kicker">Body</p>
-                            <h3>Content editor</h3>
+                            <p class="section-kicker">{{ t('Body') }}</p>
+                            <h3>{{ t('Content editor') }}</h3>
                         </div>
                         <label class="field-label field-label--inline">
-                            <span>Send as HTML</span>
+                            <span>{{ t('Send as HTML') }}</span>
                             <el-switch v-model="state.composeForm.is_html" />
                         </label>
                     </div>
                     <label class="field-label">
-                        <span>Message</span>
-                        <el-input v-model="state.composeForm.body" type="textarea" :rows="state.isMobile ? 10 : 14" resize="vertical" placeholder="Start writing" />
+                        <span>{{ t('Message') }}</span>
+                        <el-input v-model="state.composeForm.body" type="textarea" :rows="state.isMobile ? 10 : 14" resize="vertical" :placeholder="t('Start writing')" />
                     </label>
                 </section>
 
                 <section class="drawer-section">
                     <div class="drawer-section__head">
                         <div>
-                            <p class="section-kicker">Attachments</p>
+                            <p class="section-kicker">{{ t('Attachments') }}</p>
                             <h3>{{ t('Supporting files') }}</h3>
                         </div>
                         <el-button @click="triggerComposeFilePicker()">{{ t('Add attachment') }}</el-button>

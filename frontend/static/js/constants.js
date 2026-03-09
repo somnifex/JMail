@@ -1,4 +1,5 @@
 export const MOBILE_QUERY = '(max-width: 1024px)';
+export const INBOX_COMPACT_QUERY = '(max-width: 1360px)';
 export const UI_PREFS_KEY = 'jmail_ui_prefs';
 export const EMAIL_SCOPE_ALL = 'all';
 

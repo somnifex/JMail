@@ -363,6 +363,7 @@ class SendEmailResponse(BaseModel):
 
 
 class SystemSettings(BaseModel):
+    system_name: str = 'JMail'
     allow_registration: bool = True
     default_max_mailboxes_per_user: int = 5
     default_fetch_interval: int = 300
@@ -370,6 +371,7 @@ class SystemSettings(BaseModel):
 
 
 class SystemSettingsUpdate(BaseModel):
+    system_name: Optional[str] = Field(None, min_length=1, max_length=100)
     allow_registration: Optional[bool] = None
     default_max_mailboxes_per_user: Optional[int] = Field(None, ge=1, le=50)
     default_fetch_interval: Optional[int] = Field(None, ge=60, le=3600)

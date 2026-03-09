@@ -136,12 +136,13 @@ function buildSearchRecord(store) {
     };
 }
 
-function buildRuleDraftFromEmail(email) {
+function buildRuleDraftFromEmail(email, t = (key, params = {}) => key.replace(/\{(\w+)\}/g, (_, token) => (params[token] ?? `{${token}}`))) {
     const subject = normalizeThreadSubject(email?.subject);
     const sender = email?.from_address || '';
-    const senderName = email?.from_name || sender || 'Sender';
+    const senderName = email?.from_name || sender || t('Sender');
+    const seedName = sender || subject || t('No subject');
     return {
-        name: sender ? `Handle ${senderName}` : `Handle ${subject}`,
+        name: t('Handle {name}', { name: sender ? senderName : seedName }),
         mailbox_id: email?.mailbox_id ? String(email.mailbox_id) : '',
         match_field: sender ? 'sender' : 'subject',
         match_operator: 'contains',
@@ -247,9 +248,15 @@ function useInboxWorkspace() {
     });
     const conversationItems = computed(() => [...store.state.emailConversation]
         .sort((left, right) => new Date(right?.received_at || right?.sent_at || 0) - new Date(left?.received_at || left?.sent_at || 0)));
-    const ruleCountLabel = computed(() => `${store.activeRuleCount.value || 0} active`);
+    const isCompactInbox = computed(() => store.state.isMobile || store.state.isInboxCompact);
+    const ruleCountLabel = computed(() => store.t('{count} active', { count: store.activeRuleCount.value || 0 }));
     const drawerDirection = computed(() => store.state.isMobile ? 'btt' : 'rtl');
     const drawerSize = computed(() => store.state.isMobile ? '92%' : '480px');
+    const railDrawerDirection = computed(() => store.state.isMobile ? 'btt' : 'ltr');
+    const railDrawerSize = computed(() => store.state.isMobile ? '88%' : '360px');
+    const readerDrawerDirection = computed(() => store.state.isMobile ? 'btt' : 'rtl');
+    const readerDrawerSize = computed(() => store.state.isMobile ? '92%' : '560px');
+    const paginationLayout = computed(() => isCompactInbox.value ? 'prev, pager, next' : 'total, sizes, prev, pager, next');
     const searchStatusLabel = computed(() => EMAIL_FILTERS.find((item) => item.key === store.state.emailStatus)?.label || 'All Mail');
     const flaggedFilterLabel = computed(() => {
         if (store.state.searchFlagged === true) return 'Starred only';
@@ -260,10 +267,10 @@ function useInboxWorkspace() {
 
     const mailboxNameById = (mailboxId) => {
         if (!mailboxId) {
-            return 'All mailboxes';
+            return store.t('All Mailboxes');
         }
         const mailbox = store.state.mailboxes.find((item) => item.id === Number(mailboxId));
-        return mailbox?.name || mailbox?.email || 'Selected mailbox';
+        return mailbox?.name || mailbox?.email || store.t('Selected mailbox');
     };
 
     const openMailboxBranch = (mailboxId) => {
@@ -406,7 +413,7 @@ function useInboxWorkspace() {
         }
         inboxUi.rulesDrawerOpen = true;
         inboxUi.editingRuleId = null;
-        inboxUi.ruleDraft = buildRuleDraftFromEmail(email);
+        inboxUi.ruleDraft = buildRuleDraftFromEmail(email, store.t);
     };
 
     const applyRuleTemplate = (template) => {
@@ -442,7 +449,7 @@ function useInboxWorkspace() {
         || thread.items.some((item) => item.id === store.state.selectedEmailId);
 
     const selectConversationItem = async (email) => {
-        await store.selectEmail(email, store.state.isMobile);
+        await store.selectEmail(email, isCompactInbox.value);
     };
 
     const submitRuleDraft = async () => {
@@ -480,14 +487,14 @@ function useInboxWorkspace() {
         });
     };
 
-    const ruleFieldLabel = (key) => RULE_FIELD_OPTIONS.find((item) => item.key === key)?.label || key || 'Field';
-    const ruleActionLabel = (key) => RULE_ACTION_OPTIONS.find((item) => item.key === key)?.label || key || 'Action';
-    const ruleOperatorLabel = (key) => ({
+    const ruleFieldLabel = (key) => store.t(RULE_FIELD_OPTIONS.find((item) => item.key === key)?.label || key || 'Field');
+    const ruleActionLabel = (key) => store.t(RULE_ACTION_OPTIONS.find((item) => item.key === key)?.label || key || 'Action');
+    const ruleOperatorLabel = (key) => store.t(({
         contains: 'Contains',
         equals: 'Equals',
         starts_with: 'Starts with',
         ends_with: 'Ends with',
-    })[key] || key || 'Match';
+    })[key] || key || 'Match');
 
     const messageStatusTone = (email) => {
         if (email?.status === 'deleted') return 'danger';
@@ -515,9 +522,15 @@ function useInboxWorkspace() {
         streamSections,
         searchSummaryChips,
         conversationItems,
+        isCompactInbox,
         ruleCountLabel,
         drawerDirection,
         drawerSize,
+        railDrawerDirection,
+        railDrawerSize,
+        readerDrawerDirection,
+        readerDrawerSize,
+        paginationLayout,
         hasInboxFilters,
         mailboxNameById,
         openMailboxBranch,
@@ -588,8 +601,8 @@ const railTemplate = `
     <article class="glass-panel rail-panel rail-panel--tree">
         <div class="section-head section-head--compact">
             <div>
-                <p class="section-kicker">Mail Structure</p>
-                <h3>Folders and accounts</h3>
+                <p class="section-kicker">{{ t('Mail Structure') }}</p>
+                <h3>{{ t('Folders & Accounts') }}</h3>
             </div>
             <el-button text @click="openMailboxDrawer('create')">{{ t('Add Mailbox') }}</el-button>
         </div>
@@ -597,8 +610,8 @@ const railTemplate = `
         <div class="folder-tree">
             <section class="folder-tree__group">
                 <header class="folder-tree__head">
-                    <span>Smart folders</span>
-                    <small>Drag to all mail, archive or deleted</small>
+                    <span>{{ t('Smart folders') }}</span>
+                    <small>{{ t('Drag to all mail, archive or deleted') }}</small>
                 </header>
                 <button
                     v-for="node in smartFolders"
@@ -628,10 +641,10 @@ const railTemplate = `
 
             <section class="folder-tree__group">
                 <header class="folder-tree__head">
-                    <span>Mailboxes</span>
-                    <small>{{ state.mailboxes.length }} accounts</small>
+                    <span>{{ t('Mailboxes') }}</span>
+                    <small>{{ t('{count} accounts', { count: state.mailboxes.length }) }}</small>
                 </header>
-                <article v-for="branch in mailboxBranches" :key="branch.mailbox.id" class="folder-branch">
+                <article v-for="branch in mailboxBranches" :key="branch.mailbox.id" class="folder-branch" :class="{ 'is-expanded': branch.expanded }">
                     <button type="button" class="folder-branch__head" @click="openMailboxBranch(branch.mailbox.id)">
                         <div>
                             <strong>{{ branch.mailbox.name || branch.mailbox.email }}</strong>
@@ -661,7 +674,7 @@ const railTemplate = `
                             @drop.prevent="handleFolderDrop(node)"
                         >
                             <div class="folder-node__copy">
-                                <strong>{{ node.label }}</strong>
+                                <strong>{{ t(node.label) }}</strong>
                                 <small>{{ describeLastFetch(branch.mailbox) }}</small>
                             </div>
                             <b>{{ node.count }}</b>
@@ -672,8 +685,8 @@ const railTemplate = `
 
             <section class="folder-tree__group">
                 <header class="folder-tree__head">
-                    <span>Automation</span>
-                    <small>Drop a message here to seed a rule</small>
+                    <span>{{ t('Automation') }}</span>
+                    <small>{{ t('Drop a message here to seed a rule') }}</small>
                 </header>
                 <button
                     type="button"
@@ -687,7 +700,7 @@ const railTemplate = `
                 >
                     <span class="folder-node__icon">RL</span>
                     <div class="folder-node__copy">
-                        <strong>Rules Center</strong>
+                        <strong>{{ t('Rules Center') }}</strong>
                         <small>{{ ruleCountLabel }}</small>
                     </div>
                     <b>{{ state.rules.length }}</b>
@@ -800,17 +813,17 @@ const searchRailTemplate = `
 const readerTemplate = `<div v-if="state.emailDetail" class="reader-stack" :class="{ 'is-mobile': mobile }">
     <header class="reader-header">
         <div class="reader-header__copy">
-            <p class="section-kicker">Message Detail</p>
-            <h2>{{ state.emailDetail.subject || '(No subject)' }}</h2>
+            <p class="section-kicker">{{ t('Message Detail') }}</p>
+            <h2>{{ state.emailDetail.subject || t('No subject') }}</h2>
             <div class="reader-meta-line">
                 <span class="status-pill" :data-tone="messageStatusTone(state.emailDetail)">{{ emailStatusLabel(state.emailDetail.status) }}</span>
-                <span class="status-pill" v-if="state.emailDetail.is_flagged" data-tone="warning">Flagged</span>
-                <span class="status-pill" v-if="state.emailDetail.has_attachments" data-tone="info">Attachment</span>
+                <span class="status-pill" v-if="state.emailDetail.is_flagged" data-tone="warning">{{ t('Flagged') }}</span>
+                <span class="status-pill" v-if="state.emailDetail.has_attachments" data-tone="info">{{ t('Attachment') }}</span>
                 <span class="status-pill" data-tone="muted">{{ currentMailboxLabelForEmail(state.emailDetail) }}</span>
             </div>
         </div>
         <div class="reader-header__side">
-            <button v-if="mobile" type="button" class="ghost-button" @click="state.mobileReaderOpen = false">Back to list</button>
+            <button v-if="mobile" type="button" class="ghost-button" @click="state.mobileReaderOpen = false">{{ t('Back to list') }}</button>
             <span>{{ formatRelativeTime(state.emailDetail.sent_at || state.emailDetail.received_at) }}</span>
             <span>{{ formatDateTime(state.emailDetail.sent_at || state.emailDetail.received_at) }}</span>
         </div>
@@ -818,27 +831,27 @@ const readerTemplate = `<div v-if="state.emailDetail" class="reader-stack" :clas
 
     <div class="reader-actions" :class="{ 'reader-actions--deleted': state.emailDetail.status === 'deleted' }">
         <template v-if="state.emailDetail.status !== 'deleted'">
-            <el-button @click="replyToEmail(state.emailDetail)">Reply</el-button>
-            <el-button @click="toggleReadState(state.emailDetail)">{{ state.emailDetail.status === 'read' ? 'Mark unread' : 'Mark read' }}</el-button>
-            <el-button @click="toggleStarState(state.emailDetail)">{{ state.emailDetail.is_flagged ? 'Remove flag' : 'Flag' }}</el-button>
-            <el-button v-if="state.emailDetail.status !== 'archived'" @click="archiveEmail(state.emailDetail)">Archive</el-button>
-            <el-button v-else type="success" plain @click="unarchiveEmail(state.emailDetail)">Move to inbox</el-button>
-            <el-button type="danger" plain @click="deleteEmail(state.emailDetail)">Delete</el-button>
+            <el-button @click="replyToEmail(state.emailDetail)">{{ t('Reply') }}</el-button>
+            <el-button @click="toggleReadState(state.emailDetail)">{{ state.emailDetail.status === 'read' ? t('Mark unread') : t('Mark read') }}</el-button>
+            <el-button @click="toggleStarState(state.emailDetail)">{{ state.emailDetail.is_flagged ? t('Remove flag') : t('Flag') }}</el-button>
+            <el-button v-if="state.emailDetail.status !== 'archived'" @click="archiveEmail(state.emailDetail)">{{ t('Archive') }}</el-button>
+            <el-button v-else type="success" plain @click="unarchiveEmail(state.emailDetail)">{{ t('Move to inbox') }}</el-button>
+            <el-button type="danger" plain @click="deleteEmail(state.emailDetail)">{{ t('Delete') }}</el-button>
         </template>
         <template v-else>
-            <el-button type="success" plain @click="restoreEmail(state.emailDetail)">Restore to inbox</el-button>
-            <el-button type="danger" plain @click="purgeEmail(state.emailDetail)">Permanently delete</el-button>
-            <span class="reader-actions__hint">Deleted messages leave the main workflow until they are restored.</span>
+            <el-button type="success" plain @click="restoreEmail(state.emailDetail)">{{ t('Restore to inbox') }}</el-button>
+            <el-button type="danger" plain @click="purgeEmail(state.emailDetail)">{{ t('Permanently delete') }}</el-button>
+            <span class="reader-actions__hint">{{ t('Deleted messages leave the main workflow until they are restored.') }}</span>
         </template>
     </div>
 
     <article class="glass-subpanel conversation-panel">
         <div class="section-head section-head--compact">
             <div>
-                <p class="section-kicker">Conversation</p>
-                <h3>{{ conversationItems.length || 1 }} messages</h3>
+                <p class="section-kicker">{{ t('Conversation') }}</p>
+                <h3>{{ t('{count} messages', { count: conversationItems.length || 1 }) }}</h3>
             </div>
-            <span class="status-pill" data-tone="info">{{ state.conversationLoading ? 'Loading' : 'Grouped' }}</span>
+            <span class="status-pill" data-tone="info">{{ state.conversationLoading ? t('Loading') : t('Grouped') }}</span>
         </div>
         <div class="conversation-list" v-loading="state.conversationLoading">
             <button
@@ -853,16 +866,16 @@ const readerTemplate = `<div v-if="state.emailDetail" class="reader-stack" :clas
                     <strong>{{ formatSenderLine(item.from_name, item.from_address) }}</strong>
                     <span>{{ formatRelativeTime(item.sent_at || item.received_at) }}</span>
                 </div>
-                <p>{{ item.preview_text || item.subject || 'No preview available' }}</p>
+                <p>{{ item.preview_text || item.subject || t('No preview available') }}</p>
                 <div class="conversation-item__meta">
                     <span>{{ emailStatusLabel(item.status) }}</span>
-                    <span v-if="item.has_attachments">Attachment</span>
-                    <span v-if="item.is_flagged">Flagged</span>
+                    <span v-if="item.has_attachments">{{ t('Attachment') }}</span>
+                    <span v-if="item.is_flagged">{{ t('Flagged') }}</span>
                 </div>
             </button>
             <div v-if="!conversationItems.length" class="conversation-item conversation-item--empty">
-                <strong>This conversation contains a single message</strong>
-                <p>Future messages with the same thread key will appear here.</p>
+                <strong>{{ t('This conversation contains a single message') }}</strong>
+                <p>{{ t('Future messages with the same thread key will appear here.') }}</p>
             </div>
         </div>
     </article>
@@ -870,26 +883,26 @@ const readerTemplate = `<div v-if="state.emailDetail" class="reader-stack" :clas
     <article class="reader-card">
         <div class="reader-grid">
             <div>
-                <span>Sender</span>
+                <span>{{ t('Sender') }}</span>
                 <strong>{{ formatSenderLine(state.emailDetail.from_name, state.emailDetail.from_address) }}</strong>
             </div>
             <div>
-                <span>Recipients</span>
-                <strong>{{ formatAddressList(state.emailDetail.to_addresses) || 'Not recorded' }}</strong>
+                <span>{{ t('Recipients') }}</span>
+                <strong>{{ formatAddressList(state.emailDetail.to_addresses) || t('Not recorded') }}</strong>
             </div>
             <div>
-                <span>CC</span>
-                <strong>{{ formatAddressList(state.emailDetail.cc_addresses) || 'None' }}</strong>
+                <span>{{ t('CC') }}</span>
+                <strong>{{ formatAddressList(state.emailDetail.cc_addresses) || t('None') }}</strong>
             </div>
             <div>
-                <span>Time</span>
+                <span>{{ t('Time') }}</span>
                 <strong>{{ formatDateTime(state.emailDetail.sent_at || state.emailDetail.received_at) }}</strong>
             </div>
         </div>
 
         <div v-if="emailAttachments.length" class="attachment-strip">
             <div class="attachment-chip" v-for="attachment in emailAttachments" :key="attachment.filename + '-' + attachment.size">
-                <strong>{{ attachment.filename || 'Attachment' }}</strong>
+                <strong>{{ attachment.filename || t('Attachment') }}</strong>
                 <span>{{ formatFileSize(attachment.size || 0) }}</span>
             </div>
         </div>
@@ -901,14 +914,14 @@ const readerTemplate = `<div v-if="state.emailDetail" class="reader-stack" :clas
                 :srcdoc="buildEmailIframeDocument(state.emailDetail.html_content)"
                 sandbox=""
             ></iframe>
-            <pre v-else class="reader-pre">{{ state.emailDetail.text_content || 'No message body available' }}</pre>
+            <pre v-else class="reader-pre">{{ state.emailDetail.text_content || t('No message body available') }}</pre>
         </div>
     </article>
 </div>
 <div v-else class="empty-panel empty-panel--reader">
     <div class="empty-panel__icon">RD</div>
-    <h3>Select a message to start reading</h3>
-    <p>The detail pane stays aligned with list selection and conversation context.</p>
+    <h3>{{ t('Select a message to start reading') }}</h3>
+    <p>{{ t('The detail pane stays aligned with list selection and conversation context.') }}</p>
 </div>`;
 
 const RailColumn = {
@@ -944,8 +957,8 @@ const messageTemplate = `
                 {{ inboxUi.searchPanelOpen ? t('Hide filters') : t('Advanced filters') }}
             </button>
             <button v-if="state.currentView !== 'search'" type="button" class="ghost-button" @click="openRulesDrawer()">{{ t('Rules') }}</button>
-            <button v-if="state.isMobile" type="button" class="ghost-button" @click="state.mobileRailOpen = true">{{ state.currentView === 'search' ? t('Filters') : t('Folders') }}</button>
-            <button v-if="state.isMobile && state.selectedEmailId" type="button" class="ghost-button" @click="openSelectedEmailOnMobile()">Open detail</button>
+            <button v-if="isCompactInbox" type="button" class="ghost-button" @click="state.mobileRailOpen = true">{{ state.currentView === 'search' ? t('Filters') : t('Folders') }}</button>
+            <button v-if="isCompactInbox && state.selectedEmailId" type="button" class="ghost-button" @click="openSelectedEmailOnMobile()">{{ t('Open detail') }}</button>
             <button v-if="hasInboxFilters" type="button" class="ghost-button" @click="clearInboxQuery()">{{ t('Clear') }}</button>
         </div>
     </header>
@@ -1080,35 +1093,35 @@ const messageTemplate = `
     </div>
 
     <div v-if="inboxUi.dragIds.length" class="drop-hint">
-        Dragging {{ inboxUi.dragIds.length }} messages. Drop them on folders or the rules center.
+        {{ t('Dragging {count} messages. Drop them on folders or the rules center.', { count: inboxUi.dragIds.length }) }}
     </div>
 
     <div v-if="state.emails.length" class="lane-bulkbar">
         <div class="lane-bulkbar__meta">
-            <span>{{ state.emailViewMode === 'thread' ? 'Thread workflow' : 'Message workflow' }}</span>
-            <strong>{{ selectedEmailCount ? ('Selected ' + selectedEmailCount) : ('Current page ' + state.emails.length) }}</strong>
+            <span>{{ state.emailViewMode === 'thread' ? t('Thread workflow') : t('Message workflow') }}</span>
+            <strong>{{ selectedEmailCount ? t('Selected {count}', { count: selectedEmailCount }) : t('Current page {count}', { count: state.emails.length }) }}</strong>
         </div>
         <div class="lane-bulkbar__actions">
             <button type="button" class="ghost-button" @click="togglePageSelection()">
-                {{ isPageSelectionFull ? 'Clear page' : 'Select page' }}
+                {{ isPageSelectionFull ? t('Clear page') : t('Select page') }}
             </button>
             <template v-if="selectedEmailCount">
                 <template v-if="state.emailStatus === 'deleted'">
-                    <button type="button" class="ghost-button" @click="bulkRestoreSelected()">Restore selected</button>
-                    <button type="button" class="ghost-button ghost-button--danger" @click="bulkPurgeSelected()">Permanently delete</button>
+                    <button type="button" class="ghost-button" @click="bulkRestoreSelected()">{{ t('Restore selected') }}</button>
+                    <button type="button" class="ghost-button ghost-button--danger" @click="bulkPurgeSelected()">{{ t('Permanently delete') }}</button>
                 </template>
                 <template v-else-if="state.emailStatus === 'archived'">
-                    <button type="button" class="ghost-button" @click="moveEmailsToFolder(state.selectedEmailIds, 'all')">Move to inbox</button>
-                    <button type="button" class="ghost-button ghost-button--danger" @click="bulkDeleteSelected()">Delete selected</button>
+                    <button type="button" class="ghost-button" @click="moveEmailsToFolder(state.selectedEmailIds, 'all')">{{ t('Move to inbox') }}</button>
+                    <button type="button" class="ghost-button ghost-button--danger" @click="bulkDeleteSelected()">{{ t('Delete selected') }}</button>
                 </template>
                 <template v-else>
-                    <button type="button" class="ghost-button" @click="bulkMarkRead(true)">Mark read</button>
-                    <button type="button" class="ghost-button" @click="bulkMarkRead(false)">Mark unread</button>
-                    <button type="button" class="ghost-button" @click="bulkArchiveSelected()">Archive selected</button>
-                    <button type="button" class="ghost-button ghost-button--danger" @click="bulkDeleteSelected()">Delete selected</button>
+                    <button type="button" class="ghost-button" @click="bulkMarkRead(true)">{{ t('Mark read') }}</button>
+                    <button type="button" class="ghost-button" @click="bulkMarkRead(false)">{{ t('Mark unread') }}</button>
+                    <button type="button" class="ghost-button" @click="bulkArchiveSelected()">{{ t('Archive selected') }}</button>
+                    <button type="button" class="ghost-button ghost-button--danger" @click="bulkDeleteSelected()">{{ t('Delete selected') }}</button>
                 </template>
-                <button type="button" class="ghost-button" @click="openRuleSeed(selectedEmails[0] || state.emailDetail)">Create rule</button>
-                <button type="button" class="ghost-button" @click="clearEmailSelection()">Clear selection</button>
+                <button type="button" class="ghost-button" @click="openRuleSeed(selectedEmails[0] || state.emailDetail)">{{ t('Create rule') }}</button>
+                <button type="button" class="ghost-button" @click="clearEmailSelection()">{{ t('Clear selection') }}</button>
             </template>
         </div>
     </div>
@@ -1128,23 +1141,21 @@ const messageTemplate = `
                         @dragstart="startThreadDrag(thread, $event)"
                         @dragend="clearDragState()"
                     >
-                        <button type="button" class="thread-card__shell" @click="selectThread(thread, state.isMobile)">
+                        <button type="button" class="thread-card__shell" @click="selectThread(thread, isCompactInbox)">
                             <div class="thread-card__top">
-                                <div>
-                                    <strong>{{ thread.subject }}</strong>
-                                    <p>{{ thread.participants.join(' / ') || 'Unknown participants' }}</p>
-                                </div>
+                                <strong class="thread-card__sender">{{ thread.participants.join(' / ') || t('Unknown participants') }}</strong>
                                 <div class="thread-card__meta">
                                     <span>{{ formatRelativeTime(thread.latest_received_at) }}</span>
-                                    <span class="thread-card__count">{{ thread.count }} messages</span>
+                                    <span class="thread-card__count">{{ t('{count} messages', { count: thread.count }) }}</span>
                                 </div>
                             </div>
-                            <p class="thread-card__preview">{{ thread.preview_text || 'No preview available' }}</p>
+                            <h3 class="thread-card__subject">{{ thread.subject }}</h3>
+                            <p class="thread-card__preview">{{ thread.preview_text || t('No preview available') }}</p>
                             <div class="thread-card__footer">
                                 <span>{{ currentMailboxLabelForEmail(thread.latest_email) }}</span>
-                                <span v-if="thread.unread_count">Unread {{ thread.unread_count }}</span>
-                                <span v-if="thread.has_attachments">Attachment</span>
-                                <span v-if="thread.is_flagged">Flagged</span>
+                                <span v-if="thread.unread_count">{{ t('Unread {count}', { count: thread.unread_count }) }}</span>
+                                <span v-if="thread.has_attachments">{{ t('Attachment') }}</span>
+                                <span v-if="thread.is_flagged">{{ t('Flagged') }}</span>
                             </div>
                         </button>
                     </article>
@@ -1170,21 +1181,21 @@ const messageTemplate = `
                             <button type="button" class="message-card__select" :class="{ 'is-selected': isEmailSelected(email.id) }" @click.stop="toggleEmailSelection(email.id)">
                                 <span></span>
                             </button>
-                            <button type="button" class="message-card__shell" @click="selectEmail(email, state.isMobile)">
+                            <button type="button" class="message-card__shell" @click="selectEmail(email, isCompactInbox)">
                                 <div class="message-card__top">
-                                    <strong>{{ formatSenderLine(email.from_name, email.from_address) }}</strong>
+                                    <strong class="message-card__sender">{{ formatSenderLine(email.from_name, email.from_address) }}</strong>
                                     <div class="message-card__time">
                                         <span>{{ formatRelativeTime(email.sent_at || email.received_at) }}</span>
                                         <span v-if="email.status === 'deleted'" class="message-card__badge">Deleted</span>
                                         <span v-else-if="email.status === 'archived'" class="message-card__badge message-card__badge--archived">Archived</span>
                                     </div>
                                 </div>
-                                <h3>{{ email.subject || '(No subject)' }}</h3>
-                                <p>{{ email.preview_text || 'No preview available' }}</p>
+                                <h3 class="message-card__subject">{{ email.subject || t('No subject') }}</h3>
+                                <p class="message-card__preview">{{ email.preview_text || t('No preview available') }}</p>
                                 <div class="message-card__meta">
                                     <span>{{ currentMailboxLabelForEmail(email) }}</span>
-                                    <span v-if="email.has_attachments">Attachment</span>
-                                    <span v-if="email.is_flagged">Flagged</span>
+                                    <span v-if="email.has_attachments">{{ t('Attachment') }}</span>
+                                    <span v-if="email.is_flagged">{{ t('Flagged') }}</span>
                                 </div>
                             </button>
                         </div>
@@ -1194,15 +1205,15 @@ const messageTemplate = `
         </template>
         <div v-else class="empty-panel empty-panel--stream">
             <div class="empty-panel__icon">IN</div>
-            <h3>No messages in this scope</h3>
-            <p>Change folders, adjust filters or sync mailboxes to load more content.</p>
+            <h3>{{ t('No messages in this scope') }}</h3>
+            <p>{{ t('Change folders, adjust filters or sync mailboxes to load more content.') }}</p>
         </div>
     </div>
 
     <div class="pagination-wrap" v-if="state.emailTotal > 0">
         <el-pagination
             background
-            :layout="state.isMobile ? 'prev, pager, next' : 'total, sizes, prev, pager, next'"
+            :layout="paginationLayout"
             :page-sizes="[20, 40, 80, 120]"
             :page-size="state.emailPageSize"
             :current-page="state.emailPage"
@@ -1240,16 +1251,16 @@ const RulesDrawer = {
         :direction="drawerDirection"
         :size="drawerSize"
         class="utility-drawer utility-drawer--rules"
-        title="Rules Center"
+        :title="t('Rules Center')"
     >
         <div class="rules-shell">
             <section class="glass-subpanel">
                 <div class="section-head section-head--compact">
                     <div>
-                        <p class="section-kicker">Templates</p>
-                        <h3>Quick start</h3>
+                        <p class="section-kicker">{{ t('Templates') }}</p>
+                        <h3>{{ t('Quick start') }}</h3>
                     </div>
-                    <span class="status-pill" data-tone="info">{{ state.rules.length }} rules</span>
+                    <span class="status-pill" data-tone="info">{{ t('{count} rules', { count: state.rules.length }) }}</span>
                 </div>
                 <div class="rule-template-grid">
                     <button v-for="template in RULE_TEMPLATES" :key="template.key" type="button" class="rule-template" @click="applyRuleTemplate(template)">
@@ -1262,20 +1273,20 @@ const RulesDrawer = {
             <form class="glass-subpanel rules-form" @submit.prevent="submitRuleDraft()">
                 <div class="section-head section-head--compact">
                     <div>
-                        <p class="section-kicker">Rule Editor</p>
-                        <h3>{{ inboxUi.editingRuleId ? 'Update rule' : 'Create rule' }}</h3>
+                        <p class="section-kicker">{{ t('Rule Editor') }}</p>
+                        <h3>{{ inboxUi.editingRuleId ? t('Update rule') : t('Create rule') }}</h3>
                     </div>
-                    <button type="button" class="ghost-button" @click="openRulesDrawer()">Reset</button>
+                    <button type="button" class="ghost-button" @click="openRulesDrawer()">{{ t('Reset') }}</button>
                 </div>
 
                 <label class="search-field">
-                    <span>Rule name</span>
-                    <input v-model="inboxUi.ruleDraft.name" type="text" placeholder="Example: Archive billing notifications" />
+                    <span>{{ t('Rule name') }}</span>
+                    <input v-model="inboxUi.ruleDraft.name" type="text" :placeholder="t('Example: Archive billing notifications')" />
                 </label>
                 <label class="search-field">
-                    <span>Mailbox scope</span>
+                    <span>{{ t('Mailbox scope') }}</span>
                     <select v-model="inboxUi.ruleDraft.mailbox_id">
-                        <option value="">All mailboxes</option>
+                        <option value="">{{ t('All Mailboxes') }}</option>
                         <option v-for="mailbox in state.mailboxes" :key="mailbox.id" :value="String(mailbox.id)">
                             {{ mailbox.name || mailbox.email }}
                         </option>
@@ -1283,45 +1294,45 @@ const RulesDrawer = {
                 </label>
                 <div class="search-panel__grid search-panel__grid--rules">
                     <label class="search-field">
-                        <span>Match field</span>
+                        <span>{{ t('Match field') }}</span>
                         <select v-model="inboxUi.ruleDraft.match_field">
-                            <option v-for="field in RULE_FIELD_OPTIONS" :key="field.key" :value="field.key">{{ field.label }}</option>
+                            <option v-for="field in RULE_FIELD_OPTIONS" :key="field.key" :value="field.key">{{ t(field.label) }}</option>
                         </select>
                     </label>
                     <label class="search-field">
-                        <span>Operator</span>
+                        <span>{{ t('Operator') }}</span>
                         <select v-model="inboxUi.ruleDraft.match_operator">
-                            <option value="contains">Contains</option>
-                            <option value="equals">Equals</option>
-                            <option value="starts_with">Starts with</option>
-                            <option value="ends_with">Ends with</option>
+                            <option value="contains">{{ t('Contains') }}</option>
+                            <option value="equals">{{ t('Equals') }}</option>
+                            <option value="starts_with">{{ t('Starts with') }}</option>
+                            <option value="ends_with">{{ t('Ends with') }}</option>
                         </select>
                     </label>
                 </div>
                 <label class="search-field">
-                    <span>Match value</span>
-                    <input v-model="inboxUi.ruleDraft.match_value" type="text" placeholder="Example: newsletter@example.com" />
+                    <span>{{ t('Match value') }}</span>
+                    <input v-model="inboxUi.ruleDraft.match_value" type="text" :placeholder="t('Example: newsletter@example.com')" />
                 </label>
                 <label class="search-field">
-                    <span>Action</span>
+                    <span>{{ t('Action') }}</span>
                     <select v-model="inboxUi.ruleDraft.action">
-                        <option v-for="action in RULE_ACTION_OPTIONS" :key="action.key" :value="action.key">{{ action.label }}</option>
+                        <option v-for="action in RULE_ACTION_OPTIONS" :key="action.key" :value="action.key">{{ t(action.label) }}</option>
                     </select>
                 </label>
                 <label class="rule-toggle">
                     <input v-model="inboxUi.ruleDraft.is_active" type="checkbox" />
-                    <span>Enable immediately after saving</span>
+                    <span>{{ t('Enable immediately after saving') }}</span>
                 </label>
                 <el-button native-type="submit" type="primary" :loading="state.rulesSaving">
-                    {{ inboxUi.editingRuleId ? 'Save rule' : 'Create rule' }}
+                    {{ inboxUi.editingRuleId ? t('Save rule') : t('Create rule') }}
                 </el-button>
             </form>
 
             <section class="glass-subpanel rules-list">
                 <div class="section-head section-head--compact">
                     <div>
-                        <p class="section-kicker">Existing Rules</p>
-                        <h3>Automation list</h3>
+                        <p class="section-kicker">{{ t('Existing Rules') }}</p>
+                        <h3>{{ t('Automation list') }}</h3>
                     </div>
                 </div>
                 <div v-if="state.rules.length" class="rules-list__grid">
@@ -1332,7 +1343,7 @@ const RulesDrawer = {
                                 <p>{{ mailboxNameById(rule.mailbox_id) }}</p>
                             </div>
                             <span class="status-pill" :data-tone="rule.is_active ? 'success' : 'muted'">
-                                {{ rule.is_active ? 'Enabled' : 'Disabled' }}
+                                {{ rule.is_active ? t('Enabled') : t('Disabled') }}
                             </span>
                         </div>
                         <div class="rule-card__meta">
@@ -1341,20 +1352,20 @@ const RulesDrawer = {
                             <strong>{{ rule.match_value }}</strong>
                         </div>
                         <div class="rule-card__meta">
-                            <span>Action</span>
+                            <span>{{ t('Action') }}</span>
                             <strong>{{ ruleActionLabel(rule.action) }}</strong>
                         </div>
                         <div class="rule-card__actions">
-                            <button type="button" class="ghost-button" @click="openRulesDrawer(rule)">Edit</button>
-                            <button type="button" class="ghost-button" @click="toggleRuleActive(rule)">{{ rule.is_active ? 'Disable' : 'Enable' }}</button>
-                            <button type="button" class="ghost-button ghost-button--danger" @click="deleteRuleEntry(rule)">Delete</button>
+                            <button type="button" class="ghost-button" @click="openRulesDrawer(rule)">{{ t('Edit') }}</button>
+                            <button type="button" class="ghost-button" @click="toggleRuleActive(rule)">{{ rule.is_active ? t('Disable') : t('Enable') }}</button>
+                            <button type="button" class="ghost-button ghost-button--danger" @click="deleteRuleEntry(rule)">{{ t('Delete') }}</button>
                         </div>
                     </article>
                 </div>
                 <div v-else class="empty-panel empty-panel--grid">
                     <div class="empty-panel__icon">RL</div>
-                    <h3>No automation rules yet</h3>
-                    <p>Start from a template or drag a message into the rules center to seed a draft.</p>
+                    <h3>{{ t('No automation rules yet') }}</h3>
+                    <p>{{ t('Start from a template or drag a message into the rules center to seed a draft.') }}</p>
                 </div>
             </section>
         </div>
@@ -1378,23 +1389,23 @@ export const InboxView = {
         RulesDrawer,
     },
     template: `
-    <section class="desk-shell inbox-shell inbox-shell--studio">
-        <aside class="desk-rail" v-if="!state.isMobile">
+    <section class="desk-shell inbox-shell inbox-shell--studio" :class="{ 'inbox-shell--compact': isCompactInbox }">
+        <aside class="desk-rail" v-if="!isCompactInbox">
             <RailColumn />
         </aside>
         <div class="desk-stream">
             <MessageColumn />
         </div>
-        <div class="desk-reader" v-if="!state.isMobile">
+        <div class="desk-reader" v-if="!isCompactInbox">
             <ReaderSurface />
         </div>
 
-        <section v-if="state.isMobile && state.mobileReaderOpen" class="reader-overlay">
-            <ReaderSurface :mobile="true" />
-        </section>
-
-        <el-drawer v-if="state.isMobile" v-model="state.mobileRailOpen" direction="btt" size="88%" class="utility-drawer utility-drawer--rail" title="Folders & Accounts">
+        <el-drawer v-if="isCompactInbox" v-model="state.mobileRailOpen" :direction="railDrawerDirection" :size="railDrawerSize" class="utility-drawer utility-drawer--rail" :title="t('Folders & Accounts')">
             <RailColumn />
+        </el-drawer>
+
+        <el-drawer v-if="isCompactInbox" v-model="state.mobileReaderOpen" :direction="readerDrawerDirection" :size="readerDrawerSize" class="utility-drawer utility-drawer--reader" :title="t('Message Detail')">
+            <ReaderSurface />
         </el-drawer>
 
         <RulesDrawer />
@@ -1412,23 +1423,23 @@ export const SearchView = {
         ReaderSurface,
     },
     template: `
-    <section class="desk-shell inbox-shell inbox-shell--studio inbox-shell--search">
-        <aside class="desk-rail" v-if="!state.isMobile">
+    <section class="desk-shell inbox-shell inbox-shell--studio inbox-shell--search" :class="{ 'inbox-shell--compact': isCompactInbox }">
+        <aside class="desk-rail" v-if="!isCompactInbox">
             <SearchRail />
         </aside>
         <div class="desk-stream">
             <MessageColumn />
         </div>
-        <div class="desk-reader" v-if="!state.isMobile">
+        <div class="desk-reader" v-if="!isCompactInbox">
             <ReaderSurface />
         </div>
 
-        <section v-if="state.isMobile && state.mobileReaderOpen" class="reader-overlay">
-            <ReaderSurface :mobile="true" />
-        </section>
-
-        <el-drawer v-if="state.isMobile" v-model="state.mobileRailOpen" direction="btt" size="88%" class="utility-drawer utility-drawer--rail" :title="t('Refine Results')">
+        <el-drawer v-if="isCompactInbox" v-model="state.mobileRailOpen" :direction="railDrawerDirection" :size="railDrawerSize" class="utility-drawer utility-drawer--rail" :title="t('Refine Results')">
             <SearchRail />
+        </el-drawer>
+
+        <el-drawer v-if="isCompactInbox" v-model="state.mobileReaderOpen" :direction="readerDrawerDirection" :size="readerDrawerSize" class="utility-drawer utility-drawer--reader" :title="t('Message Detail')">
+            <ReaderSurface />
         </el-drawer>
     </section>
     `,

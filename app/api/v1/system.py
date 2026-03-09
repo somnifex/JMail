@@ -13,14 +13,14 @@ router = APIRouter()
 
 
 @router.get('/info')
-async def get_system_info(_: UserResponse = Depends(get_current_active_user), db: AsyncSession = Depends(get_db)):
+async def get_system_info(db: AsyncSession = Depends(get_db)):
     settings = get_settings()
     runtime_settings = await SystemConfigService(db).get_runtime_settings()
     google_oauth = bool(settings.GOOGLE_CLIENT_ID and settings.GOOGLE_CLIENT_SECRET and settings.GOOGLE_REDIRECT_URI)
     microsoft_oauth = bool(settings.MICROSOFT_CLIENT_ID and settings.MICROSOFT_CLIENT_SECRET and settings.MICROSOFT_REDIRECT_URI)
 
     return {
-        'app_name': settings.APP_NAME,
+        'app_name': runtime_settings.system_name,
         'app_version': settings.APP_VERSION,
         'features': {
             'oauth': bool(google_oauth or settings.GITHUB_CLIENT_ID or microsoft_oauth),
